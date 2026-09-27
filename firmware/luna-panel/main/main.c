@@ -1883,6 +1883,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        luna_agent_set_http_ready(false);
         ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_WARNING, "Waiting for Wi-Fi", 0);
         if (s_wifi_retry_count < CONFIG_LUNA_WIFI_MAXIMUM_RETRY) {
             ++s_wifi_retry_count;
@@ -1903,6 +1904,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         char detail[UI_DETAIL_LENGTH];
         snprintf(detail, sizeof(detail), "Wi-Fi IPv4: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
+        luna_agent_set_http_ready(true);
         ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_READY, detail, 0);
         if (luna_agent_is_configured()) {
             start_agent_sync_task();

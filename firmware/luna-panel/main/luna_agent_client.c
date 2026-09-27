@@ -32,6 +32,7 @@ typedef struct {
 
 static const char *TAG = "luna_agent";
 static SemaphoreHandle_t s_http_mutex;
+static volatile bool s_http_ready;
 
 esp_err_t luna_agent_client_init(void)
 {
@@ -274,6 +275,11 @@ bool luna_agent_is_configured(void)
     return CONFIG_LUNA_AGENT_HOST[0] != '\0' && CONFIG_LUNA_AGENT_TOKEN[0] != '\0';
 }
 
+void luna_agent_set_http_ready(bool ready)
+{
+    s_http_ready = ready;
+}
+
 esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
 {
     ESP_RETURN_ON_FALSE(state != NULL, ESP_ERR_INVALID_ARG, TAG, "State pointer is null");
@@ -301,8 +307,8 @@ esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
                  esp_err_to_name(usb_result));
     }
 
-    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
-                        "PC agent host or token is not configured");
+    ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
+                        "PC agent HTTP transport is not ready");
 
     char url[URL_CAPACITY];
     ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/state"), ESP_ERR_INVALID_SIZE, TAG,
@@ -359,8 +365,8 @@ esp_err_t luna_agent_fetch_cover(uint8_t **data, size_t *length)
 {
     ESP_RETURN_ON_FALSE(data != NULL && length != NULL, ESP_ERR_INVALID_ARG, TAG,
                         "Cover output pointer is null");
-    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
-                        "PC agent is not configured");
+    ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
+                        "PC agent HTTP transport is not ready");
     *data = NULL;
     *length = 0;
 
@@ -445,8 +451,8 @@ esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int va
         ESP_LOGW(TAG, "USB action failed, trying HTTP: %s", esp_err_to_name(usb_result));
     }
 
-    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
-                        "PC agent is not configured");
+    ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
+                        "PC agent HTTP transport is not ready");
 
     char url[URL_CAPACITY];
     ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/actions"), ESP_ERR_INVALID_SIZE, TAG,
