@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $configuration)) {
 
 if ([string]::IsNullOrWhiteSpace($Python)) {
     if (-not (Test-Path -LiteralPath $venvPython)) {
-        throw "缺少 Windows 助手运行环境，请先执行 .\pc-agent\setup-agent.ps1"
+        throw "The Windows agent environment is missing. Run .\pc-agent\setup-agent.ps1 first."
     }
     $Python = $venvPython
 }
