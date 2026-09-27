@@ -27,6 +27,8 @@ path remains the working baseline during this migration.
 
 Implementation and hardware acceptance steps are in
 [R1 USB P0 实机验证](docs/development/r1-usb-p0.md).
+USB state and action migration is tracked in
+[R2 USB 状态与动作验证](docs/development/r2-usb-state-actions.md).
 
 Voice control is paused. The firmware no longer loads ESP-SR speech models,
 listens for a wake word, or executes spoken commands. The microphone level

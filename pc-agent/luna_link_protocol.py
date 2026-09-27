@@ -10,7 +10,7 @@ import zlib
 
 MAGIC = b"LUNA"
 VERSION = 1
-MAX_PAYLOAD = 512
+MAX_PAYLOAD = 4096
 HEADER = struct.Struct("<4sBBBBII")
 CRC = struct.Struct("<I")
 
@@ -21,6 +21,10 @@ class MessageType(IntEnum):
     PING = 3
     PONG = 4
     TOUCH_TEST = 5
+    STATE_REQUEST = 6
+    STATE_SNAPSHOT = 7
+    ACTION_REQUEST = 8
+    ACTION_RESULT = 9
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,4 +109,3 @@ class FrameDecoder:
             payload = bytes(self._buffer[HEADER.size : HEADER.size + payload_length])
             frames.append(Frame(message_type, request_id, payload, flags))
             del self._buffer[:frame_length]
-

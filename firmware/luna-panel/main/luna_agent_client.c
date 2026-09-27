@@ -12,8 +12,9 @@
 #include "esp_check.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "luna_usb.h"
 
-#define RESPONSE_CAPACITY 4096
+#define RESPONSE_CAPACITY (LUNA_USB_MAX_PAYLOAD + 1)
 #define COVER_CAPACITY (256 * 1024)
 #define URL_CAPACITY 160
 
@@ -170,69 +171,14 @@ static bool parse_volume(const cJSON *object, luna_volume_state_t *volume)
     return true;
 }
 
-bool luna_agent_is_configured(void)
+static esp_err_t parse_state_response(const char *json, luna_agent_state_t *state)
 {
-    return CONFIG_LUNA_AGENT_HOST[0] != '\0' && CONFIG_LUNA_AGENT_TOKEN[0] != '\0';
-}
-
-esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
-{
-    ESP_RETURN_ON_FALSE(state != NULL, ESP_ERR_INVALID_ARG, TAG, "State pointer is null");
-    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
-                        "PC agent host or token is not configured");
     memset(state, 0, sizeof(*state));
     state->codex.remaining_percent = -1;
     state->codex.weekly_remaining_percent = -1;
     state->weather.temperature_c = -999;
 
-    char url[URL_CAPACITY];
-    ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/state"), ESP_ERR_INVALID_SIZE, TAG,
-                        "Agent URL is too long");
-    ESP_RETURN_ON_ERROR(http_lock(), TAG, "Agent HTTP lock failed");
-
-    response_buffer_t *response = calloc(1, sizeof(*response));
-    if (response == NULL) {
-        http_unlock();
-        ESP_LOGE(TAG, "Agent response buffer allocation failed");
-        return ESP_ERR_NO_MEM;
-    }
-    esp_http_client_config_t config = {
-        .url = url,
-        .event_handler = http_event_handler,
-        .user_data = response,
-        .timeout_ms = 2500,
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
-        free(response);
-        http_unlock();
-        ESP_LOGE(TAG, "HTTP client allocation failed");
-        return ESP_ERR_NO_MEM;
-    }
-    esp_http_client_set_header(client, "X-Luna-Token", CONFIG_LUNA_AGENT_TOKEN);
-
-    esp_err_t result = esp_http_client_perform(client);
-    const int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
-    http_unlock();
-    if (result != ESP_OK) {
-        free(response);
-        ESP_LOGE(TAG, "Agent state request failed: %s", esp_err_to_name(result));
-        return result;
-    }
-    if (response->overflow) {
-        free(response);
-        ESP_LOGE(TAG, "Agent response exceeded %d bytes", RESPONSE_CAPACITY);
-        return ESP_ERR_INVALID_SIZE;
-    }
-    if (status != 200) {
-        free(response);
-        ESP_LOGE(TAG, "Agent returned HTTP %d", status);
-        return ESP_ERR_HTTP_BASE + status;
-    }
-
-    cJSON *root = cJSON_Parse(response->data);
-    free(response);
+    cJSON *root = cJSON_Parse(json);
     ESP_RETURN_ON_FALSE(root != NULL, ESP_ERR_INVALID_RESPONSE, TAG, "Agent JSON is invalid");
 
     const int protocol = json_int(root, "protocol_version", 0);
@@ -302,6 +248,113 @@ esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
     return ESP_OK;
 }
 
+static esp_err_t parse_action_response(const char *json,
+                                       luna_agent_action_result_t *action_result)
+{
+    cJSON *root = cJSON_Parse(json);
+    ESP_RETURN_ON_FALSE(root != NULL, ESP_ERR_INVALID_RESPONSE, TAG,
+                        "Agent action JSON is invalid");
+    if (!json_bool(root, "ok", false)) {
+        cJSON_Delete(root);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+    if (action_result != NULL) {
+        memset(action_result, 0, sizeof(*action_result));
+        action_result->has_music = parse_music(
+            cJSON_GetObjectItemCaseSensitive(root, "music"), &action_result->music);
+        action_result->has_volume = parse_volume(
+            cJSON_GetObjectItemCaseSensitive(root, "volume"), &action_result->volume);
+    }
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+bool luna_agent_is_configured(void)
+{
+    return CONFIG_LUNA_AGENT_HOST[0] != '\0' && CONFIG_LUNA_AGENT_TOKEN[0] != '\0';
+}
+
+esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
+{
+    ESP_RETURN_ON_FALSE(state != NULL, ESP_ERR_INVALID_ARG, TAG, "State pointer is null");
+
+    if (luna_usb_is_ready()) {
+        response_buffer_t *usb_response = calloc(1, sizeof(*usb_response));
+        if (usb_response == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        size_t usb_length = 0;
+        esp_err_t usb_result = luna_usb_exchange(
+            LUNA_LINK_MESSAGE_STATE_REQUEST, LUNA_LINK_MESSAGE_STATE_SNAPSHOT,
+            NULL, 0, usb_response->data, sizeof(usb_response->data) - 1,
+            &usb_length, 2500);
+        if (usb_result == ESP_OK) {
+            usb_response->data[usb_length] = '\0';
+            usb_result = parse_state_response(usb_response->data, state);
+        }
+        free(usb_response);
+        if (usb_result == ESP_OK) {
+            ESP_LOGD(TAG, "Agent state received over USB");
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG, "USB state request failed, trying HTTP: %s",
+                 esp_err_to_name(usb_result));
+    }
+
+    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
+                        "PC agent host or token is not configured");
+
+    char url[URL_CAPACITY];
+    ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/state"), ESP_ERR_INVALID_SIZE, TAG,
+                        "Agent URL is too long");
+    ESP_RETURN_ON_ERROR(http_lock(), TAG, "Agent HTTP lock failed");
+
+    response_buffer_t *response = calloc(1, sizeof(*response));
+    if (response == NULL) {
+        http_unlock();
+        ESP_LOGE(TAG, "Agent response buffer allocation failed");
+        return ESP_ERR_NO_MEM;
+    }
+    esp_http_client_config_t config = {
+        .url = url,
+        .event_handler = http_event_handler,
+        .user_data = response,
+        .timeout_ms = 2500,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL) {
+        free(response);
+        http_unlock();
+        ESP_LOGE(TAG, "HTTP client allocation failed");
+        return ESP_ERR_NO_MEM;
+    }
+    esp_http_client_set_header(client, "X-Luna-Token", CONFIG_LUNA_AGENT_TOKEN);
+
+    esp_err_t result = esp_http_client_perform(client);
+    const int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+    http_unlock();
+    if (result != ESP_OK) {
+        free(response);
+        ESP_LOGE(TAG, "Agent state request failed: %s", esp_err_to_name(result));
+        return result;
+    }
+    if (response->overflow) {
+        free(response);
+        ESP_LOGE(TAG, "Agent response exceeded %d bytes", RESPONSE_CAPACITY);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (status != 200) {
+        free(response);
+        ESP_LOGE(TAG, "Agent returned HTTP %d", status);
+        return ESP_ERR_HTTP_BASE + status;
+    }
+
+    result = parse_state_response(response->data, state);
+    free(response);
+    return result;
+}
+
 esp_err_t luna_agent_fetch_cover(uint8_t **data, size_t *length)
 {
     ESP_RETURN_ON_FALSE(data != NULL && length != NULL, ESP_ERR_INVALID_ARG, TAG,
@@ -358,12 +411,6 @@ esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int va
 {
     ESP_RETURN_ON_FALSE(action != NULL && action[0] != '\0', ESP_ERR_INVALID_ARG, TAG,
                         "Action is empty");
-    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
-                        "PC agent is not configured");
-
-    char url[URL_CAPACITY];
-    ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/actions"), ESP_ERR_INVALID_SIZE, TAG,
-                        "Agent URL is too long");
 
     char body[192];
     const int body_length = value >= 0
@@ -375,6 +422,35 @@ esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int va
                    request_id, action);
     ESP_RETURN_ON_FALSE(body_length > 0 && (size_t)body_length < sizeof(body),
                         ESP_ERR_INVALID_SIZE, TAG, "Action body is too long");
+
+    if (luna_usb_is_ready()) {
+        response_buffer_t *usb_response = calloc(1, sizeof(*usb_response));
+        if (usb_response == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        size_t usb_length = 0;
+        esp_err_t usb_result = luna_usb_exchange(
+            LUNA_LINK_MESSAGE_ACTION_REQUEST, LUNA_LINK_MESSAGE_ACTION_RESULT,
+            body, (size_t)body_length, usb_response->data,
+            sizeof(usb_response->data) - 1, &usb_length, 3000);
+        if (usb_result == ESP_OK) {
+            usb_response->data[usb_length] = '\0';
+            usb_result = parse_action_response(usb_response->data, action_result);
+        }
+        free(usb_response);
+        if (usb_result == ESP_OK) {
+            ESP_LOGI(TAG, "Agent action delivered over USB: %s", action);
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG, "USB action failed, trying HTTP: %s", esp_err_to_name(usb_result));
+    }
+
+    ESP_RETURN_ON_FALSE(luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
+                        "PC agent is not configured");
+
+    char url[URL_CAPACITY];
+    ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/actions"), ESP_ERR_INVALID_SIZE, TAG,
+                        "Agent URL is too long");
     ESP_RETURN_ON_ERROR(http_lock(), TAG, "Action HTTP lock failed");
 
     response_buffer_t *response = calloc(1, sizeof(*response));
@@ -415,21 +491,7 @@ esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int va
         return ESP_ERR_HTTP_BASE + status;
     }
 
-    cJSON *root = cJSON_Parse(response->data);
+    esp_err_t parse_result = parse_action_response(response->data, action_result);
     free(response);
-    ESP_RETURN_ON_FALSE(root != NULL, ESP_ERR_INVALID_RESPONSE, TAG,
-                        "Agent action JSON is invalid");
-    if (!json_bool(root, "ok", false)) {
-        cJSON_Delete(root);
-        return ESP_ERR_INVALID_RESPONSE;
-    }
-    if (action_result != NULL) {
-        memset(action_result, 0, sizeof(*action_result));
-        action_result->has_music = parse_music(
-            cJSON_GetObjectItemCaseSensitive(root, "music"), &action_result->music);
-        action_result->has_volume = parse_volume(
-            cJSON_GetObjectItemCaseSensitive(root, "volume"), &action_result->volume);
-    }
-    cJSON_Delete(root);
-    return ESP_OK;
+    return parse_result;
 }

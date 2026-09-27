@@ -31,11 +31,16 @@ Codex 功能使用当前电脑已经登录的 Codex App Server，只读获取 5 
 默认服务端口是 `8765`。首次运行时，如果 Windows 防火墙弹出提示，请允许
 Python 访问专用网络。
 
+助手启动后还会自动发现 Luna 的原生 USB CDC 端口，不依赖固定 COM 号。正式助手与
+`luna_usb_probe.py` 不能同时占用同一端口；启动前请先在探针窗口按 `Ctrl+C`。
+
 启动日志中出现以下内容代表真实媒体状态同步已经启用：
 
 ```text
 Windows media session synchronization is active.
 Codex App Server synchronization is active.
+Luna USB agent connected on COM28: firmware=R2-USB
+Luna USB state snapshot served: sequence=... count=1
 ```
 
 启动时还会打印实际选中的 `Codex executable` 路径。助手会先检查 PATH，再自动
@@ -57,6 +62,10 @@ PowerShell 没有 `codex` 命令也能正常工作。如果仍显示
 概率、经纬度与更新时间。
 
 ## 接口
+
+USB 握手成功后，状态快照和白名单动作优先通过 Luna Link 传输；USB 请求失败时，
+迁移期固件仍会尝试以下 HTTP 接口。音乐封面目前仍使用 HTTP，后续改为带完整性校验的
+USB 分块传输。
 
 - `GET /health`：不需要鉴权的进程健康检查；
 - `GET /api/v1/state`：读取电脑、音乐和其他卡片状态；

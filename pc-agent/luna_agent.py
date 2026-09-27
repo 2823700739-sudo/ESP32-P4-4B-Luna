@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from codex_adapter import CodexAdapter
+from luna_usb_transport import LunaUsbTransport
 from weather_adapter import WeatherAdapter
 from windows_media import WindowsMediaAdapter
 from windows_volume import WindowsVolumeAdapter
@@ -278,8 +279,14 @@ def main() -> int:
     weather.start()
     print(f"Codex executable: {codex.executable}")
     initial_codex = codex.snapshot()
-    server = LunaServer((host, port), AgentState(config, media, codex, weather, volume))
+    agent = AgentState(config, media, codex, weather, volume)
+    server = LunaServer((host, port), agent)
+    usb_transport = LunaUsbTransport(agent)
+    if bool(config.get("usb_enabled", True)):
+        usb_transport.start()
     print(f"Luna agent listening on http://{host}:{port}")
+    print("Luna USB transport is enabled." if bool(config.get("usb_enabled", True))
+          else "Luna USB transport is disabled.")
     print("Windows media session synchronization is active.")
     if initial_codex["codex"]["available"]:
         print("Codex App Server synchronization is active.")
@@ -296,6 +303,7 @@ def main() -> int:
         print("Stopping Luna agent...")
     finally:
         server.server_close()
+        usb_transport.close()
         media.close()
         codex.close()
         weather.close()

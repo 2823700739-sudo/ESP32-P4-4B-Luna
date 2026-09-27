@@ -3,6 +3,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -12,6 +13,19 @@ extern "C" {
 #endif
 
 #define LUNA_USB_PROTOCOL_VERSION 1U
+#define LUNA_USB_MAX_PAYLOAD 4096U
+
+typedef enum {
+    LUNA_LINK_MESSAGE_HELLO = 1,
+    LUNA_LINK_MESSAGE_HELLO_ACK = 2,
+    LUNA_LINK_MESSAGE_PING = 3,
+    LUNA_LINK_MESSAGE_PONG = 4,
+    LUNA_LINK_MESSAGE_TOUCH_TEST = 5,
+    LUNA_LINK_MESSAGE_STATE_REQUEST = 6,
+    LUNA_LINK_MESSAGE_STATE_SNAPSHOT = 7,
+    LUNA_LINK_MESSAGE_ACTION_REQUEST = 8,
+    LUNA_LINK_MESSAGE_ACTION_RESULT = 9,
+} luna_link_message_type_t;
 
 typedef enum {
     LUNA_USB_EVENT_DRIVER_READY,
@@ -42,6 +56,20 @@ esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context);
 
 /** Return true after the Windows host has opened the CDC interface (DTR set). */
 bool luna_usb_is_connected(void);
+
+/** Return true after the Windows agent completes the Luna Link handshake. */
+bool luna_usb_is_ready(void);
+
+/**
+ * Send one request and wait for its matching response frame.
+ *
+ * Only a small number of concurrent callers are supported. The response is
+ * copied into the caller-owned buffer before this function returns.
+ */
+esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
+                            const void *payload, size_t payload_length,
+                            void *response, size_t response_capacity,
+                            size_t *response_length, uint32_t timeout_ms);
 
 /** Queue a diagnostic touch event for the connected Windows probe. */
 esp_err_t luna_usb_send_touch_test(uint32_t touch_count);

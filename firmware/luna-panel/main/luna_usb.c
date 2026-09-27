@@ -3,12 +3,14 @@
 #include "luna_usb.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_log.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "tinyusb.h"
 #include "tinyusb_cdc_acm.h"
@@ -18,21 +20,12 @@
 #define LUNA_USB_MAGIC_SIZE 4U
 #define LUNA_USB_HEADER_SIZE 16U
 #define LUNA_USB_CRC_SIZE 4U
-#define LUNA_USB_MAX_PAYLOAD 512U
-#define LUNA_USB_MAX_FRAME (LUNA_USB_HEADER_SIZE + LUNA_USB_MAX_PAYLOAD + LUNA_USB_CRC_SIZE)
-#define LUNA_USB_RX_STREAM_SIZE 2048U
+#define LUNA_USB_RX_STREAM_SIZE 8192U
 #define LUNA_USB_RX_CHUNK_SIZE 512U
 #define LUNA_USB_EVENT_QUEUE_DEPTH 12U
 #define LUNA_USB_TASK_STACK_SIZE 6144U
 #define LUNA_USB_TASK_PRIORITY 5U
-
-typedef enum {
-    LUNA_LINK_MESSAGE_HELLO = 1,
-    LUNA_LINK_MESSAGE_HELLO_ACK = 2,
-    LUNA_LINK_MESSAGE_PING = 3,
-    LUNA_LINK_MESSAGE_PONG = 4,
-    LUNA_LINK_MESSAGE_TOUCH_TEST = 5,
-} luna_link_message_type_t;
+#define LUNA_USB_PENDING_COUNT 3U
 
 typedef enum {
     LUNA_INTERNAL_RX_CHUNK,
@@ -51,8 +44,19 @@ typedef struct {
     uint8_t type;
     uint32_t request_id;
     size_t payload_length;
-    uint8_t payload[LUNA_USB_MAX_PAYLOAD];
+    uint8_t *payload;
 } luna_tx_message_t;
+
+typedef struct {
+    bool active;
+    uint8_t response_type;
+    uint32_t request_id;
+    uint8_t *response;
+    size_t response_capacity;
+    size_t response_length;
+    esp_err_t result;
+    SemaphoreHandle_t done;
+} luna_pending_exchange_t;
 
 typedef struct {
     luna_internal_event_type_t type;
@@ -72,8 +76,11 @@ static luna_usb_event_cb_t s_event_callback;
 static void *s_event_context;
 static volatile bool s_started;
 static volatile bool s_connected;
+static volatile bool s_handshake_complete;
 static uint8_t s_rx_stream[LUNA_USB_RX_STREAM_SIZE];
 static size_t s_rx_stream_length;
+static SemaphoreHandle_t s_pending_mutex;
+static luna_pending_exchange_t s_pending[LUNA_USB_PENDING_COUNT];
 
 static uint32_t read_le32(const uint8_t *data)
 {
@@ -190,7 +197,12 @@ static esp_err_t write_message(const luna_tx_message_t *message)
         return ESP_ERR_INVALID_SIZE;
     }
 
-    uint8_t frame[LUNA_USB_MAX_FRAME];
+    const size_t frame_length =
+        LUNA_USB_HEADER_SIZE + message->payload_length + LUNA_USB_CRC_SIZE;
+    uint8_t *frame = malloc(frame_length);
+    if (frame == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
     memcpy(frame, LUNA_USB_MAGIC, LUNA_USB_MAGIC_SIZE);
     frame[4] = LUNA_USB_PROTOCOL_VERSION;
     frame[5] = message->type;
@@ -203,25 +215,37 @@ static esp_err_t write_message(const luna_tx_message_t *message)
     }
     const size_t content_length = LUNA_USB_HEADER_SIZE + message->payload_length;
     write_le32(frame + content_length, luna_crc32(frame, content_length));
-    const size_t frame_length = content_length + LUNA_USB_CRC_SIZE;
 
     const size_t queued = tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, frame, frame_length);
     if (queued != frame_length) {
         ESP_LOGW(TAG, "CDC TX queue accepted %u of %u bytes", (unsigned)queued,
                  (unsigned)frame_length);
+        free(frame);
         return ESP_ERR_NO_MEM;
     }
-    return tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, pdMS_TO_TICKS(100));
+    const esp_err_t result =
+        tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, pdMS_TO_TICKS(100));
+    free(frame);
+    return result;
 }
 
 static esp_err_t queue_message(uint8_t type, uint32_t request_id, const void *payload,
                                size_t payload_length)
 {
-    if (!s_started || !s_connected) {
+    if (s_event_queue == NULL || !s_connected) {
         return ESP_ERR_INVALID_STATE;
     }
     if (payload_length > LUNA_USB_MAX_PAYLOAD || (payload_length > 0 && payload == NULL)) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t *payload_copy = NULL;
+    if (payload_length > 0) {
+        payload_copy = malloc(payload_length);
+        if (payload_copy == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        memcpy(payload_copy, payload, payload_length);
     }
 
     luna_internal_event_t event = {
@@ -230,12 +254,62 @@ static esp_err_t queue_message(uint8_t type, uint32_t request_id, const void *pa
             .type = type,
             .request_id = request_id,
             .payload_length = payload_length,
+            .payload = payload_copy,
         },
     };
-    if (payload_length > 0) {
-        memcpy(event.data.tx.payload, payload, payload_length);
+    if (!queue_internal_event(&event)) {
+        free(payload_copy);
+        return ESP_ERR_TIMEOUT;
     }
-    return queue_internal_event(&event) ? ESP_OK : ESP_ERR_TIMEOUT;
+    return ESP_OK;
+}
+
+static bool complete_pending_response(uint8_t type, uint32_t request_id,
+                                      const uint8_t *payload, size_t payload_length)
+{
+    if (s_pending_mutex == NULL ||
+        xSemaphoreTake(s_pending_mutex, portMAX_DELAY) != pdTRUE) {
+        return false;
+    }
+
+    bool matched = false;
+    for (size_t index = 0; index < LUNA_USB_PENDING_COUNT; ++index) {
+        luna_pending_exchange_t *pending = &s_pending[index];
+        if (!pending->active || pending->response_type != type ||
+            pending->request_id != request_id) {
+            continue;
+        }
+        if (payload_length > pending->response_capacity) {
+            pending->result = ESP_ERR_INVALID_SIZE;
+        } else {
+            if (payload_length > 0) {
+                memcpy(pending->response, payload, payload_length);
+            }
+            pending->response_length = payload_length;
+            pending->result = ESP_OK;
+        }
+        xSemaphoreGive(pending->done);
+        matched = true;
+        break;
+    }
+    xSemaphoreGive(s_pending_mutex);
+    return matched;
+}
+
+static void fail_pending_exchanges(esp_err_t result)
+{
+    if (s_pending_mutex == NULL ||
+        xSemaphoreTake(s_pending_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+    for (size_t index = 0; index < LUNA_USB_PENDING_COUNT; ++index) {
+        luna_pending_exchange_t *pending = &s_pending[index];
+        if (pending->active) {
+            pending->result = result;
+            xSemaphoreGive(pending->done);
+        }
+    }
+    xSemaphoreGive(s_pending_mutex);
 }
 
 static void process_message(uint8_t type, uint32_t request_id, const uint8_t *payload,
@@ -244,10 +318,11 @@ static void process_message(uint8_t type, uint32_t request_id, const uint8_t *pa
     switch (type) {
     case LUNA_LINK_MESSAGE_HELLO: {
         static const char response[] =
-            "{\"device\":\"luna\",\"protocol\":1,\"firmware\":\"R1-USB-P0\","
-            "\"capabilities\":[\"ping\",\"touch_test\"]}";
+            "{\"device\":\"luna\",\"protocol\":1,\"firmware\":\"R2-USB\","
+            "\"capabilities\":[\"ping\",\"touch_test\",\"state\",\"action\"]}";
         if (queue_message(LUNA_LINK_MESSAGE_HELLO_ACK, request_id, response,
                           sizeof(response) - 1) == ESP_OK) {
+            s_handshake_complete = true;
             notify_application(LUNA_USB_EVENT_HANDSHAKE, request_id,
                                "Luna Link handshake complete");
         }
@@ -256,6 +331,13 @@ static void process_message(uint8_t type, uint32_t request_id, const uint8_t *pa
     case LUNA_LINK_MESSAGE_PING:
         if (queue_message(LUNA_LINK_MESSAGE_PONG, request_id, payload, payload_length) == ESP_OK) {
             notify_application(LUNA_USB_EVENT_PING, request_id, "USB ping received");
+        }
+        break;
+    case LUNA_LINK_MESSAGE_STATE_SNAPSHOT:
+    case LUNA_LINK_MESSAGE_ACTION_RESULT:
+        if (!complete_pending_response(type, request_id, payload, payload_length)) {
+            ESP_LOGW(TAG, "Ignoring unmatched Luna Link response type=%u request=%lu",
+                     (unsigned)type, (unsigned long)request_id);
         }
         break;
     default:
@@ -344,6 +426,7 @@ static void luna_usb_task(void *arg)
             break;
         case LUNA_INTERNAL_TX_MESSAGE: {
             const esp_err_t result = write_message(&event.data.tx);
+            free(event.data.tx.payload);
             if (result != ESP_OK) {
                 ESP_LOGW(TAG, "USB message send failed: %s", esp_err_to_name(result));
                 notify_application(LUNA_USB_EVENT_ERROR, event.data.tx.request_id,
@@ -357,7 +440,9 @@ static void luna_usb_task(void *arg)
             break;
         case LUNA_INTERNAL_DETACHED:
             s_connected = false;
+            s_handshake_complete = false;
             s_rx_stream_length = 0;
+            fail_pending_exchanges(ESP_ERR_INVALID_STATE);
             notify_application(LUNA_USB_EVENT_DISCONNECTED, 0, "USB host detached");
             break;
         case LUNA_INTERNAL_LINE_STATE: {
@@ -369,7 +454,9 @@ static void luna_usb_task(void *arg)
                 notify_application(LUNA_USB_EVENT_CONNECTED, 0,
                                    "USB CDC open; waiting for Luna Link handshake");
             } else if (!s_connected && was_connected) {
+                s_handshake_complete = false;
                 s_rx_stream_length = 0;
+                fail_pending_exchanges(ESP_ERR_INVALID_STATE);
                 notify_application(LUNA_USB_EVENT_DISCONNECTED, 0, "USB CDC closed");
             }
             break;
@@ -377,6 +464,20 @@ static void luna_usb_task(void *arg)
         }
     }
     vTaskDelete(NULL);
+}
+
+static void delete_pending_resources(void)
+{
+    for (size_t index = 0; index < LUNA_USB_PENDING_COUNT; ++index) {
+        if (s_pending[index].done != NULL) {
+            vSemaphoreDelete(s_pending[index].done);
+            s_pending[index].done = NULL;
+        }
+    }
+    if (s_pending_mutex != NULL) {
+        vSemaphoreDelete(s_pending_mutex);
+        s_pending_mutex = NULL;
+    }
 }
 
 esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context)
@@ -391,11 +492,27 @@ esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context)
     if (s_event_queue == NULL) {
         return ESP_ERR_NO_MEM;
     }
+    s_pending_mutex = xSemaphoreCreateMutex();
+    if (s_pending_mutex == NULL) {
+        vQueueDelete(s_event_queue);
+        s_event_queue = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    for (size_t index = 0; index < LUNA_USB_PENDING_COUNT; ++index) {
+        s_pending[index].done = xSemaphoreCreateBinary();
+        if (s_pending[index].done == NULL) {
+            delete_pending_resources();
+            vQueueDelete(s_event_queue);
+            s_event_queue = NULL;
+            return ESP_ERR_NO_MEM;
+        }
+    }
 
     const tinyusb_config_t tinyusb_config =
         TINYUSB_DEFAULT_CONFIG(tinyusb_device_event_callback, NULL);
     esp_err_t result = tinyusb_driver_install(&tinyusb_config);
     if (result != ESP_OK) {
+        delete_pending_resources();
         vQueueDelete(s_event_queue);
         s_event_queue = NULL;
         return result;
@@ -411,6 +528,7 @@ esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context)
     result = tinyusb_cdcacm_init(&cdc_config);
     if (result != ESP_OK) {
         tinyusb_driver_uninstall();
+        delete_pending_resources();
         vQueueDelete(s_event_queue);
         s_event_queue = NULL;
         return result;
@@ -420,6 +538,7 @@ esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context)
                     LUNA_USB_TASK_PRIORITY, NULL) != pdPASS) {
         tinyusb_cdcacm_deinit(TINYUSB_CDC_ACM_0);
         tinyusb_driver_uninstall();
+        delete_pending_resources();
         vQueueDelete(s_event_queue);
         s_event_queue = NULL;
         return ESP_ERR_NO_MEM;
@@ -434,6 +553,79 @@ esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context)
 bool luna_usb_is_connected(void)
 {
     return s_connected;
+}
+
+bool luna_usb_is_ready(void)
+{
+    return s_connected && s_handshake_complete;
+}
+
+esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
+                            const void *payload, size_t payload_length,
+                            void *response, size_t response_capacity,
+                            size_t *response_length, uint32_t timeout_ms)
+{
+    if (!luna_usb_is_ready()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (response == NULL || response_capacity == 0 || response_length == NULL ||
+        timeout_ms == 0 || payload_length > LUNA_USB_MAX_PAYLOAD ||
+        (payload_length > 0 && payload == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (xSemaphoreTake(s_pending_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    luna_pending_exchange_t *pending = NULL;
+    for (size_t index = 0; index < LUNA_USB_PENDING_COUNT; ++index) {
+        if (!s_pending[index].active) {
+            pending = &s_pending[index];
+            break;
+        }
+    }
+    if (pending == NULL) {
+        xSemaphoreGive(s_pending_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+
+    while (xSemaphoreTake(pending->done, 0) == pdTRUE) {
+    }
+    uint32_t request_id = esp_random();
+    if (request_id == 0) {
+        request_id = 1;
+    }
+    pending->active = true;
+    pending->response_type = response_type;
+    pending->request_id = request_id;
+    pending->response = response;
+    pending->response_capacity = response_capacity;
+    pending->response_length = 0;
+    pending->result = ESP_ERR_TIMEOUT;
+    xSemaphoreGive(s_pending_mutex);
+
+    esp_err_t result = queue_message(request_type, request_id, payload, payload_length);
+    if (result == ESP_OK &&
+        xSemaphoreTake(pending->done, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+        result = ESP_ERR_TIMEOUT;
+    }
+
+    if (xSemaphoreTake(s_pending_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    if (result == ESP_OK) {
+        result = pending->result;
+    }
+    if (result == ESP_OK) {
+        *response_length = pending->response_length;
+    } else {
+        *response_length = 0;
+    }
+    pending->active = false;
+    pending->response = NULL;
+    pending->response_capacity = 0;
+    xSemaphoreGive(s_pending_mutex);
+    return result;
 }
 
 esp_err_t luna_usb_send_touch_test(uint32_t touch_count)

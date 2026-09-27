@@ -49,7 +49,7 @@ class FrameDecoderTests(unittest.TestCase):
         self.assertEqual(frames[0].payload, b"good")
 
     def test_oversized_header_resynchronizes_to_next_frame(self) -> None:
-        invalid_header = struct.pack("<4sBBBBII", b"LUNA", 1, 3, 0, 0, 99, 513)
+        invalid_header = struct.pack("<4sBBBBII", b"LUNA", 1, 3, 0, 0, 99, 4097)
         valid = encode_frame(MessageType.PONG, 7)
 
         frames = FrameDecoder().feed(invalid_header + valid)
@@ -63,7 +63,16 @@ class FrameDecoderTests(unittest.TestCase):
         frames = decoder.feed(encode_frame(MessageType.PING, 9)[2:])
         self.assertEqual(frames[0].request_id, 9)
 
+    def test_large_state_snapshot_survives_many_chunks(self) -> None:
+        payload = b"x" * 3500
+        encoded = encode_frame(MessageType.STATE_SNAPSHOT, 31, payload)
+        decoder = FrameDecoder()
+        frames = []
+        for offset in range(0, len(encoded), 127):
+            frames.extend(decoder.feed(encoded[offset : offset + 127]))
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(frames[0].payload, payload)
+
 
 if __name__ == "__main__":
     unittest.main()
-

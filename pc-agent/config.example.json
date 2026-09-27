@@ -1,6 +1,7 @@
 {
   "listen_host": "0.0.0.0",
   "port": 8765,
+  "usb_enabled": true,
   "token": "replace-with-a-random-token-at-least-20-characters",
   "preferred_media_source": "cloudmusic.exe",
   "codex_executable": "",

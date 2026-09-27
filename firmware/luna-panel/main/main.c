@@ -1858,6 +1858,19 @@ static void agent_action_task(void *arg)
     }
 }
 
+static void start_agent_sync_task(void)
+{
+    if (s_agent_task_started) {
+        return;
+    }
+    if (xTaskCreate(agent_sync_task, "agent_sync", 8192, NULL, 4, NULL) == pdPASS) {
+        s_agent_task_started = true;
+    } else {
+        ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_FAILED,
+                "Unable to start PC sync task", 0);
+    }
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                void *event_data)
 {
@@ -1891,13 +1904,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         snprintf(detail, sizeof(detail), "Wi-Fi IPv4: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
         ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_READY, detail, 0);
-        if (!s_agent_task_started && luna_agent_is_configured()) {
-            if (xTaskCreate(agent_sync_task, "agent_sync", 8192, NULL, 4, NULL) == pdPASS) {
-                s_agent_task_started = true;
-            } else {
-                ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_FAILED,
-                        "Unable to start PC sync task", 0);
-            }
+        if (luna_agent_is_configured()) {
+            start_agent_sync_task();
         }
     }
 }
@@ -2168,6 +2176,7 @@ void app_main(void)
         ESP_LOGE(TAG, "USB startup failed: %s", esp_err_to_name(error));
         ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_FAILED, esp_err_to_name(error), 0);
     }
+    start_agent_sync_task();
 
     error = nvs_flash_init();
     if (error == ESP_ERR_NVS_NO_FREE_PAGES || error == ESP_ERR_NVS_NEW_VERSION_FOUND) {

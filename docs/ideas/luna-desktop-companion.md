@@ -6,7 +6,7 @@
 
 开发基线：ESP32-P4 v1.3、ESP-IDF 6.0.2、Windows 11 电脑
 
-当前阶段：R1 USB P0 进行中；枚举、自动发现、PING/PONG 和触摸上行已实机通过
+当前阶段：R2 Luna Link 进行中；R1 枚举、自动发现、PING/PONG 和触摸上行已实机通过
 
 > 核心产品决定：**USB 负责让 Luna 成为电脑的可靠外设；Wi-Fi 负责让 Luna
 > 成为独立的联网桌面终端。**
@@ -97,8 +97,8 @@ PC 两条通道都离线 -> 保留本地与联网卡牌，电脑卡牌明确显�
 | 天气卡 | 已实现 Open-Meteo、20 分钟刷新和 PC 侧缓存 | UI 保留；数据获取迁移到面板 Wi-Fi |
 | 时钟卡 | 已实现面板 Wi-Fi NTP 校时和本地走时 | 保留 |
 | 硬件诊断 | 已实现 Wi-Fi、USB、TF 卡、音频和麦克风电平状态 | 后续增加传输统计 |
-| Windows Agent | HTTP 业务接口保留；已增加独立 USB 自动发现探针 | R2 将 USB 传输接入正式 Agent |
-| PC 通信 | Wi-Fi HTTP 业务仍在工作；USB P0 已完成握手和 PING/PONG | 重构为 USB 优先、Wi-Fi 回退 |
+| Windows Agent | HTTP 业务接口保留；正式 Agent 已接入 USB 自动发现、状态和动作传输 | 继续增加封面分块与统计 |
+| PC 通信 | USB 状态/动作优先及 HTTP 迁移期回退已通过构建，待 R2 实板验证 | 完成实测后迁移封面 |
 | USB OTG 应用 | TinyUSB CDC 已初始化，Windows COM28 实机枚举并双向通信 | 继续触摸与重连验收 |
 | 离线语音 | 已从当前固件移除，麦克风电平保留 | 暂停，不进入首版 |
 
@@ -228,7 +228,7 @@ magic | version | type | flags | request_id | payload_length | payload | crc32
 | --- | --- | --- | --- |
 | R0 重新立项 | 固定范围、架构、状态基线与验收方法 | 本文完成并作为后续范围依据 | 已完成 |
 | R1 USB P0（进行中） | TinyUSB/CDC 枚举、双向 ping、触摸动作、PC 自动发现 | 实板完成双向消息；拔插 20 次可恢复 | 2–4 人日 |
-| R2 Luna Link | 协议分帧、状态、动作、封面、去重、错误统计 | 四类 PC 数据走 USB；无固定 IP/COM | 4–7 人日 |
+| R2 Luna Link（进行中） | 协议分帧、状态、动作、封面、去重、错误统计 | 四类 PC 数据走 USB；无固定 IP/COM | 4–7 人日 |
 | R3 双通道 | USB 优先、Wi-Fi HTTP 回退、休眠与重连 | 切换不重复动作，状态来源明确 | 3–5 人日 |
 | R4 Wi-Fi 独立 | 面板直连天气、缓存、NTP 与离线标记 | PC Agent 关闭后天气和时钟仍可用 | 3–6 人日 |
 | R5 稳定与体验 | 诊断页、异常恢复、四卡实测、长时间运行 | 完成第 8 节全部首版验收 | 3–5 人日 |
@@ -316,3 +316,9 @@ ESP32-P4 具有 USB 2.0 OTG Host/Device 能力；芯片能力和官方示例只�
 7. P0 通过后再开始抽象现有 HTTP 客户端并迁移真实状态。
 
 R1 未完成前，不并行加入 HID、UAC、OTA、手机配置或扩展屏功能。
+
+R2 第一批状态与动作代码已完成本地构建和单元测试：正式 Windows Agent 自动占用 Luna
+CDC，固件通过 `STATE_REQUEST/STATE_SNAPSHOT` 获取卡片状态，通过
+`ACTION_REQUEST/ACTION_RESULT` 执行白名单动作，并保留相同 `request_id` 的去重语义。
+实板验证需要先停止独立 USB 探针并接回 USB TO UART 烧录线。封面仍由 HTTP 获取，待
+状态与动作实测通过后再加入 USB 分块、总长度与哈希校验。
