@@ -25,6 +25,9 @@ Windows, prove bidirectional framed messages and reliable reconnects, and only
 then migrate the existing card data from HTTP to USB. The current Wi-Fi HTTP
 path remains the working baseline during this migration.
 
+Implementation and hardware acceptance steps are in
+[R1 USB P0 实机验证](docs/development/r1-usb-p0.md).
+
 Voice control is paused. The firmware no longer loads ESP-SR speech models,
 listens for a wake word, or executes spoken commands. The microphone level
 meter remains on the hardware diagnostics screen. Any future AI assistant is

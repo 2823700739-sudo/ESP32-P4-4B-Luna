@@ -29,6 +29,7 @@
 #include "esp_wifi.h"
 #include "lvgl.h"
 #include "luna_agent_client.h"
+#include "luna_usb.h"
 #include "nvs_flash.h"
 
 #define UI_QUEUE_DEPTH 16
@@ -67,6 +68,7 @@
 
 typedef enum {
     LUNA_COMPONENT_WIFI,
+    LUNA_COMPONENT_USB,
     LUNA_COMPONENT_STORAGE,
     LUNA_COMPONENT_AUDIO,
     LUNA_COMPONENT_MIC,
@@ -131,6 +133,7 @@ static QueueHandle_t s_action_queue;
 static lv_obj_t *s_home_screen;
 static lv_obj_t *s_diagnostic_screen;
 static lv_obj_t *s_wifi_label;
+static lv_obj_t *s_usb_label;
 static lv_obj_t *s_storage_label;
 static lv_obj_t *s_audio_label;
 static lv_obj_t *s_detail_label;
@@ -334,6 +337,9 @@ static void ui_apply_event(const luna_ui_event_t *event)
         lv_label_set_text(s_home_wifi_label,
                           event->status == LUNA_STATUS_READY ? "Wi-Fi online" : "Wi-Fi offline");
         lv_obj_set_style_text_color(s_home_wifi_label, status_color(event->status), LV_PART_MAIN);
+        break;
+    case LUNA_COMPONENT_USB:
+        set_component_label(s_usb_label, "USB", event->status);
         break;
     case LUNA_COMPONENT_STORAGE:
         set_component_label(s_storage_label, "TF card", event->status);
@@ -1455,7 +1461,38 @@ static void touch_panel_event_cb(lv_event_t *event)
     }
 
     ++s_touch_count;
-    lv_label_set_text_fmt(s_touch_label, "Touch OK: %u", s_touch_count);
+    if (!luna_usb_is_connected()) {
+        lv_label_set_text_fmt(s_touch_label, "Touch %u / USB offline", s_touch_count);
+        return;
+    }
+
+    const esp_err_t result = luna_usb_send_touch_test(s_touch_count);
+    lv_label_set_text_fmt(s_touch_label, result == ESP_OK ? "Touch %u / USB sent"
+                                                          : "Touch %u / USB error",
+                          s_touch_count);
+}
+
+static void usb_event_handler(const luna_usb_event_t *event, void *context)
+{
+    (void)context;
+
+    switch (event->type) {
+    case LUNA_USB_EVENT_DRIVER_READY:
+    case LUNA_USB_EVENT_ATTACHED:
+        ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_BUSY, event->detail, 0);
+        break;
+    case LUNA_USB_EVENT_CONNECTED:
+    case LUNA_USB_EVENT_HANDSHAKE:
+    case LUNA_USB_EVENT_PING:
+        ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_READY, event->detail, 0);
+        break;
+    case LUNA_USB_EVENT_DISCONNECTED:
+        ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_WARNING, event->detail, 0);
+        break;
+    case LUNA_USB_EVENT_ERROR:
+        ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_WARNING, event->detail, 0);
+        break;
+    }
 }
 
 static int16_t triangle_sample(unsigned phase)
@@ -1604,18 +1641,19 @@ static esp_err_t ui_start(void)
     lv_obj_clear_flag(status_card, LV_OBJ_FLAG_SCROLLABLE);
 
     s_wifi_label = create_status_label(status_card, 20, "Wi-Fi: starting");
-    s_storage_label = create_status_label(status_card, 68, "TF card: starting");
-    s_audio_label = create_status_label(status_card, 116, "Audio: starting");
+    s_usb_label = create_status_label(status_card, 60, "USB: starting");
+    s_storage_label = create_status_label(status_card, 100, "TF card: starting");
+    s_audio_label = create_status_label(status_card, 140, "Audio: starting");
 
     s_mic_value_label = lv_label_create(status_card);
     lv_label_set_text(s_mic_value_label, "Mic 0%");
     lv_obj_set_style_text_color(s_mic_value_label, lv_color_hex(0xCBD5E1), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_mic_value_label, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(s_mic_value_label, LV_ALIGN_TOP_LEFT, 26, 169);
+    lv_obj_align(s_mic_value_label, LV_ALIGN_TOP_LEFT, 26, 193);
 
     s_mic_bar = lv_bar_create(status_card);
     lv_obj_set_size(s_mic_bar, 480, 18);
-    lv_obj_align(s_mic_bar, LV_ALIGN_TOP_RIGHT, -26, 171);
+    lv_obj_align(s_mic_bar, LV_ALIGN_TOP_RIGHT, -26, 195);
     lv_bar_set_range(s_mic_bar, 0, 100);
     lv_bar_set_value(s_mic_bar, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(s_mic_bar, lv_color_hex(0x1E293B), LV_PART_MAIN);
@@ -1629,7 +1667,7 @@ static esp_err_t ui_start(void)
     lv_obj_set_style_text_font(s_detail_label, &lv_font_montserrat_16, LV_PART_MAIN);
     lv_obj_align(s_detail_label, LV_ALIGN_BOTTOM_MID, 0, -28);
 
-    lv_obj_t *touch_button = create_action_button(screen, -160, "Tap to test touch",
+    lv_obj_t *touch_button = create_action_button(screen, -160, "Touch / USB test",
                                                    touch_panel_event_cb);
     s_touch_label = lv_obj_get_child(touch_button, 0);
 
@@ -2125,7 +2163,13 @@ void app_main(void)
                         ? ESP_OK
                         : ESP_ERR_NO_MEM);
 
-    esp_err_t error = nvs_flash_init();
+    esp_err_t error = luna_usb_start(usb_event_handler, NULL);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "USB startup failed: %s", esp_err_to_name(error));
+        ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_FAILED, esp_err_to_name(error), 0);
+    }
+
+    error = nvs_flash_init();
     if (error == ESP_ERR_NVS_NO_FREE_PAGES || error == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         error = nvs_flash_init();

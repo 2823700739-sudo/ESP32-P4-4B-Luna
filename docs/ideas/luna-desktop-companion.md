@@ -6,7 +6,7 @@
 
 开发基线：ESP32-P4 v1.3、ESP-IDF 6.0.2、Windows 11 电脑
 
-当前阶段：保留现有 P1 成果，按 USB 主链路与 Wi-Fi 独立联网的新架构重新启动开发
+当前阶段：R1 USB P0 进行中；枚举、自动发现和 PING/PONG 已实机通过
 
 > 核心产品决定：**USB 负责让 Luna 成为电脑的可靠外设；Wi-Fi 负责让 Luna
 > 成为独立的联网桌面终端。**
@@ -96,10 +96,10 @@ PC 两条通道都离线 -> 保留本地与联网卡牌，电脑卡牌明确显�
 | 音乐卡 | 已实现网易云 GSMTC 状态、封面、播放控制和系统音量 | 保留，通信迁移到 USB |
 | 天气卡 | 已实现 Open-Meteo、20 分钟刷新和 PC 侧缓存 | UI 保留；数据获取迁移到面板 Wi-Fi |
 | 时钟卡 | 已实现面板 Wi-Fi NTP 校时和本地走时 | 保留 |
-| 硬件诊断 | 已实现 Wi-Fi、TF 卡、音频和麦克风电平状态 | 增加 USB 状态和传输统计 |
-| Windows Agent | 已实现 HTTP 状态、封面和白名单动作接口 | 保留业务适配器，增加 USB 传输层 |
-| PC 通信 | 当前仅有 Wi-Fi HTTP 轮询 | 重构为 USB 优先、Wi-Fi 回退 |
-| USB OTG 应用 | 芯片和板卡支持，但 Luna 尚未初始化 USB Device 栈 | 新 P0 阻塞项 |
+| 硬件诊断 | 已实现 Wi-Fi、USB、TF 卡、音频和麦克风电平状态 | 后续增加传输统计 |
+| Windows Agent | HTTP 业务接口保留；已增加独立 USB 自动发现探针 | R2 将 USB 传输接入正式 Agent |
+| PC 通信 | Wi-Fi HTTP 业务仍在工作；USB P0 已完成握手和 PING/PONG | 重构为 USB 优先、Wi-Fi 回退 |
+| USB OTG 应用 | TinyUSB CDC 已初始化，Windows COM28 实机枚举并双向通信 | 继续触摸与重连验收 |
 | 离线语音 | 已从当前固件移除，麦克风电平保留 | 暂停，不进入首版 |
 
 现有开发文档中，ESP-IDF 编译、完整镜像合并和若干 Windows 适配器本机检查已有通过
@@ -227,7 +227,7 @@ magic | version | type | flags | request_id | payload_length | payload | crc32
 | 阶段 | 工作与交付 | 通过条件 | 估算投入 |
 | --- | --- | --- | --- |
 | R0 重新立项 | 固定范围、架构、状态基线与验收方法 | 本文完成并作为后续范围依据 | 已完成 |
-| R1 USB P0 | TinyUSB/CDC 枚举、双向 ping、触摸动作、PC 自动发现 | 实板完成双向消息；拔插 20 次可恢复 | 2–4 人日 |
+| R1 USB P0（进行中） | TinyUSB/CDC 枚举、双向 ping、触摸动作、PC 自动发现 | 实板完成双向消息；拔插 20 次可恢复 | 2–4 人日 |
 | R2 Luna Link | 协议分帧、状态、动作、封面、去重、错误统计 | 四类 PC 数据走 USB；无固定 IP/COM | 4–7 人日 |
 | R3 双通道 | USB 优先、Wi-Fi HTTP 回退、休眠与重连 | 切换不重复动作，状态来源明确 | 3–5 人日 |
 | R4 Wi-Fi 独立 | 面板直连天气、缓存、NTP 与离线标记 | PC Agent 关闭后天气和时钟仍可用 | 3–6 人日 |
@@ -303,14 +303,16 @@ ESP32-P4 具有 USB 2.0 OTG Host/Device 能力；芯片能力和官方示例只�
 
 ## 12. 紧接着执行的开发任务
 
-下一项开发工作固定为 **R1 USB P0**，在迁移任何卡牌业务之前只验证链路：
+当前开发工作固定为 **R1 USB P0**，在迁移任何卡牌业务之前只验证链路。2026-09-27
+已完成固件烧录、Windows 枚举、自动发现、协议握手和连续 PING/PONG；触摸上行与稳定性
+验收仍待完成：
 
-1. 确认 OTG 数据口、供电方式、Windows 枚举信息和芯片 USB 控制器配置；
-2. 在 Luna 固件加入最小 USB Device/CDC 组件，不改动现有四卡业务；
-3. Windows 创建最小探测程序，按 VID/PID/序列号发现 Luna；
-4. Windows 向 Luna 发送带序号的 `ping`，Luna 返回 `pong`；
-5. Luna 触摸测试按钮后向 Windows 发送一条动作测试消息；
-6. 记录 20 次拔插、冷启动和 Agent 重启结果；
+1. [x] 确认 OTG 数据口、Windows 枚举信息和芯片 USB 控制器配置；供电方式仍待断电测试；
+2. [x] 在 Luna 固件加入最小 USB Device/CDC 组件，不改动现有四卡业务；
+3. [x] Windows 创建最小探测程序，按 VID/PID/序列号发现 Luna；
+4. [x] Windows 向 Luna 发送带序号的 `ping`，Luna 返回 `pong`；
+5. [ ] Luna 触摸测试按钮后向 Windows 发送一条动作测试消息；
+6. [ ] 记录 20 次拔插、冷启动和 Agent 重启结果；
 7. P0 通过后再开始抽象现有 HTTP 客户端并迁移真实状态。
 
 R1 未完成前，不并行加入 HID、UAC、OTA、手机配置或扩展屏功能。
