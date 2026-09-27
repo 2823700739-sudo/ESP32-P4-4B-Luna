@@ -6,7 +6,7 @@
 
 开发基线：ESP32-P4 v1.3、ESP-IDF 6.0.2、Windows 11 电脑
 
-当前阶段：R1 USB P0 进行中；枚举、自动发现和 PING/PONG 已实机通过
+当前阶段：R1 USB P0 进行中；枚举、自动发现、PING/PONG 和触摸上行已实机通过
 
 > 核心产品决定：**USB 负责让 Luna 成为电脑的可靠外设；Wi-Fi 负责让 Luna
 > 成为独立的联网桌面终端。**
@@ -304,14 +304,14 @@ ESP32-P4 具有 USB 2.0 OTG Host/Device 能力；芯片能力和官方示例只�
 ## 12. 紧接着执行的开发任务
 
 当前开发工作固定为 **R1 USB P0**，在迁移任何卡牌业务之前只验证链路。2026-09-27
-已完成固件烧录、Windows 枚举、自动发现、协议握手和连续 PING/PONG；触摸上行与稳定性
-验收仍待完成：
+已完成固件烧录、Windows 枚举、自动发现、协议握手、连续 PING/PONG 和触摸上行；
+稳定性验收仍待完成：
 
 1. [x] 确认 OTG 数据口、Windows 枚举信息和芯片 USB 控制器配置；供电方式仍待断电测试；
 2. [x] 在 Luna 固件加入最小 USB Device/CDC 组件，不改动现有四卡业务；
 3. [x] Windows 创建最小探测程序，按 VID/PID/序列号发现 Luna；
 4. [x] Windows 向 Luna 发送带序号的 `ping`，Luna 返回 `pong`；
-5. [ ] Luna 触摸测试按钮后向 Windows 发送一条动作测试消息；
+5. [x] Luna 触摸测试按钮后向 Windows 发送一条动作测试消息；
 6. [ ] 记录 20 次拔插、冷启动和 Agent 重启结果；
 7. P0 通过后再开始抽象现有 HTTP 客户端并迁移真实状态。
 
