@@ -1,0 +1,30 @@
+# Local reference sources and toolchains
+.reference/
+.tools/
+
+# ESP-IDF generated files
+**/build/
+**/managed_components/
+**/sdkconfig
+**/sdkconfig.old
+
+# Local secrets and machine-specific configuration
+**/secrets.h
+**/secrets.json
+**/config.local.json
+pc-agent/weather-cache.json
+pc-agent/weather-cache.json.tmp
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python generated files
+**/__pycache__/
+**/*.pyc
+**/.venv/
+
+# Windows and editors
+.vs/
+**/.vscode/settings.json
+Thumbs.db
+Desktop.ini

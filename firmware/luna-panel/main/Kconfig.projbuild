@@ -1,0 +1,78 @@
+menu "Luna P0 Configuration"
+
+    config LUNA_WIFI_SSID
+        string "2.4 GHz Wi-Fi SSID"
+        default ""
+        help
+            Network name used by the P0 firmware. Stored only in the generated sdkconfig.
+
+    config LUNA_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        help
+            Network password used by the P0 firmware. Stored only in the generated sdkconfig.
+
+    config LUNA_WIFI_MAXIMUM_RETRY
+        int "Maximum connection retries"
+        default 10
+        range 1 100
+
+    config LUNA_AGENT_HOST
+        string "Windows companion IPv4 address"
+        default ""
+        help
+            IPv4 address of the Windows PC running the Luna companion service.
+
+    config LUNA_AGENT_PORT
+        int "Windows companion TCP port"
+        default 8765
+        range 1024 65535
+
+    config LUNA_AGENT_TOKEN
+        string "Windows companion pairing token"
+        default ""
+        help
+            Shared local-network token. Store it only in the generated sdkconfig.
+
+    config LUNA_AGENT_POLL_SECONDS
+        int "Windows companion polling interval (seconds)"
+        default 5
+        range 1 60
+
+    config LUNA_ENABLE_TF_TEST
+        bool "Run the TF-card read/write test during startup"
+        default n
+        help
+            Keep disabled during Wi-Fi stability testing. The ESP32-C6 hosted
+            Wi-Fi transport and the TF card both use SDMMC controllers, so the
+            storage test should only run when a card is inserted and storage is
+            being tested intentionally.
+
+    config LUNA_SPEAKER_VOLUME
+        int "Hardware-check speaker volume"
+        default 35
+        range 0 100
+        help
+            Output volume used by the short speaker diagnostic tone.
+
+    config LUNA_MIC_GAIN_DB
+        int "Microphone input gain (dB)"
+        default 24
+        range 0 37
+        help
+            ES7210 input gain. 24 dB matches the Waveshare ESP-IDF audio
+            example and is suitable for speech near a desktop device.
+
+    config LUNA_NTP_SERVER
+        string "Clock NTP server"
+        default "pool.ntp.org"
+        help
+            Network time source used by the standalone clock card.
+
+    config LUNA_TIMEZONE
+        string "Clock POSIX timezone"
+        default "CST-8"
+        help
+            POSIX timezone string. CST-8 displays China Standard Time.
+
+endmenu
