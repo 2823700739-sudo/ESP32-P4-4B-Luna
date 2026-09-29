@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -201,6 +202,7 @@ static bool s_media_action_inflight;
 static bool s_playback_requested_playing;
 static bool s_volume_set_pending;
 static int s_volume_requested_percent;
+static volatile bool s_clock_ntp_synced;
 static luna_status_t s_pc_status = LUNA_STATUS_PENDING;
 static char s_pc_link_name[24] = "waiting";
 
@@ -1166,7 +1168,9 @@ static void clock_refresh(void)
     snprintf(text, sizeof(text), "%04d.%02d.%02d  %s", local_time.tm_year + 1900,
              local_time.tm_mon + 1, local_time.tm_mday, weekdays[local_time.tm_wday]);
     clock_set_text_if_changed(s_clock_date_label, text);
-    clock_set_text_if_changed(s_clock_status_label, "本地时钟 · 电脑休眠仍可显示");
+    clock_set_text_if_changed(s_clock_status_label,
+                              s_clock_ntp_synced ? "本地时钟 · 电脑休眠仍可显示"
+                                                  : "估计时间 · 等待网络校时");
 }
 
 static void clock_timer_cb(lv_timer_t *timer)
@@ -1772,6 +1776,7 @@ static void agent_sync_task(void *arg)
         luna_agent_state_t state;
         const esp_err_t result = luna_agent_fetch_state(&state);
         if (result == ESP_OK) {
+            luna_weather_accept_pc_time(state.generated_at);
             ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_READY, state.pc.name, 0);
             ui_post(LUNA_COMPONENT_PC_LINK, LUNA_STATUS_READY,
                     state.transport == LUNA_AGENT_TRANSPORT_USB ? "USB" : "Wi-Fi HTTP", 0);
@@ -1931,6 +1936,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
+static void clock_ntp_synced_callback(struct timeval *time_value)
+{
+    (void)time_value;
+    s_clock_ntp_synced = true;
+    ESP_LOGI(TAG, "Clock synchronized by NTP");
+}
+
 static esp_err_t wifi_start(void)
 {
     if (CONFIG_LUNA_WIFI_SSID[0] == '\0') {
@@ -1967,6 +1979,7 @@ static esp_err_t wifi_start(void)
                         "Station config failed");
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "Wi-Fi start failed");
     esp_sntp_config_t time_config = ESP_NETIF_SNTP_DEFAULT_CONFIG(CONFIG_LUNA_NTP_SERVER);
+    time_config.sync_cb = clock_ntp_synced_callback;
     const esp_err_t time_result = esp_netif_sntp_init(&time_config);
     if (time_result != ESP_OK) {
         ESP_LOGW(TAG, "Clock sync initialization failed: %s", esp_err_to_name(time_result));

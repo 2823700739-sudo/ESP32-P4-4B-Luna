@@ -1,9 +1,11 @@
 #include "luna_weather.h"
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
 
 #include "cJSON.h"
@@ -21,7 +23,7 @@
 #define WEATHER_REFRESH_SECONDS (20 * 60)
 #define WEATHER_RETRY_SECONDS 60
 #define WEATHER_CLOCK_RETRY_SECONDS 10
-#define WEATHER_CACHE_VERSION 1U
+#define WEATHER_CACHE_VERSION 2U
 #define WEATHER_NVS_NAMESPACE "luna_weather"
 #define WEATHER_NVS_KEY "snapshot"
 
@@ -34,6 +36,7 @@ typedef struct {
 typedef struct {
     uint32_t version;
     luna_weather_state_t state;
+    int64_t last_trusted_utc;
 } weather_cache_t;
 
 static const char *TAG = "luna_weather";
@@ -44,6 +47,7 @@ static luna_weather_update_cb_t s_callback;
 static void *s_callback_context;
 static bool s_network_ready;
 static bool s_refresh_requested;
+static int64_t s_last_trusted_utc;
 
 static bool location_is_valid(const luna_weather_state_t *weather)
 {
@@ -81,6 +85,7 @@ static void save_cache_locked(void)
     const weather_cache_t cache = {
         .version = WEATHER_CACHE_VERSION,
         .state = s_weather,
+        .last_trusted_utc = s_last_trusted_utc,
     };
     result = nvs_set_blob(handle, WEATHER_NVS_KEY, &cache, sizeof(cache));
     if (result == ESP_OK) {
@@ -103,16 +108,30 @@ static void load_cache(void)
     if (nvs_open(WEATHER_NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
         return;
     }
-    weather_cache_t cache;
+    weather_cache_t cache = {0};
     size_t length = sizeof(cache);
     const esp_err_t result = nvs_get_blob(handle, WEATHER_NVS_KEY, &cache, &length);
     nvs_close(handle);
-    if (result != ESP_OK || length != sizeof(cache) ||
-        cache.version != WEATHER_CACHE_VERSION || !location_is_valid(&cache.state)) {
+    const bool current_cache = length == sizeof(cache) &&
+                               cache.version == WEATHER_CACHE_VERSION;
+    const bool legacy_cache = length == offsetof(weather_cache_t, last_trusted_utc) &&
+                              cache.version == 1;
+    if (result != ESP_OK || (!current_cache && !legacy_cache) ||
+        !location_is_valid(&cache.state)) {
         return;
     }
     s_weather = cache.state;
     s_weather.stale = s_weather.available;
+    if (current_cache && cache.last_trusted_utc >= 1700000000 &&
+        cache.last_trusted_utc <= 4102444800LL) {
+        s_last_trusted_utc = cache.last_trusted_utc;
+        if (time(NULL) < 1700000000) {
+            const struct timeval restored = {.tv_sec = (time_t)s_last_trusted_utc};
+            if (settimeofday(&restored, NULL) == 0) {
+                ESP_LOGW(TAG, "Clock estimated from last trusted weather time; waiting for NTP");
+            }
+        }
+    }
     ESP_LOGI(TAG, "Loaded device weather location and cache from NVS");
 }
 
@@ -311,6 +330,7 @@ static void weather_task(void *arg)
         if (s_network_ready && same_location(&settings, &s_weather)) {
             if (result == ESP_OK) {
                 s_weather = fetched;
+                s_last_trusted_utc = time(NULL);
                 save_cache_locked();
                 next_fetch_us = esp_timer_get_time() +
                                 (int64_t)WEATHER_REFRESH_SECONDS * 1000000;
@@ -329,6 +349,54 @@ static void weather_task(void *arg)
             publish(&published);
         }
     }
+}
+
+static bool parse_utc_timestamp(const char *value, int64_t *epoch)
+{
+    if (value == NULL || strlen(value) < 20 || value[4] != '-' || value[7] != '-' ||
+        value[10] != 'T' || value[13] != ':' || value[16] != ':' || value[19] != 'Z') {
+        return false;
+    }
+    int year, month, day, hour, minute, second;
+    if (sscanf(value, "%4d-%2d-%2dT%2d:%2d:%2dZ", &year, &month, &day,
+               &hour, &minute, &second) != 6 ||
+        year < 2024 || year > 2100 || month < 1 || month > 12 ||
+        day < 1 || day > 31 || hour < 0 || hour > 23 ||
+        minute < 0 || minute > 59 || second < 0 || second > 60) {
+        return false;
+    }
+    year -= month <= 2;
+    const int era = year / 400;
+    const unsigned year_of_era = (unsigned)(year - era * 400);
+    const unsigned day_of_year = (153U * (unsigned)(month + (month > 2 ? -3 : 9)) + 2U) / 5U +
+                                 (unsigned)day - 1U;
+    const unsigned year_of_era_day = year_of_era * 365U + year_of_era / 4U -
+                                     year_of_era / 100U + day_of_year;
+    const int64_t days = (int64_t)era * 146097 + year_of_era_day - 719468;
+    *epoch = days * 86400 + hour * 3600 + minute * 60 + second;
+    return *epoch >= 1700000000 && *epoch <= 4102444800LL;
+}
+
+void luna_weather_accept_pc_time(const char *generated_at_utc)
+{
+    if (s_mutex == NULL || time(NULL) >= 1700000000) {
+        return;
+    }
+    int64_t epoch;
+    if (!parse_utc_timestamp(generated_at_utc, &epoch)) {
+        return;
+    }
+    const struct timeval restored = {.tv_sec = (time_t)epoch};
+    if (settimeofday(&restored, NULL) != 0) {
+        return;
+    }
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    s_last_trusted_utc = epoch;
+    save_cache_locked();
+    s_refresh_requested = true;
+    xSemaphoreGive(s_mutex);
+    ESP_LOGW(TAG, "Clock estimated from authenticated PC time; waiting for NTP");
+    xTaskNotifyGive(s_task);
 }
 
 esp_err_t luna_weather_start(luna_weather_update_cb_t callback, void *context)
