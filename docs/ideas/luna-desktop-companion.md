@@ -6,7 +6,7 @@
 
 开发基线：ESP32-P4 v1.3、ESP-IDF 6.0.2、Windows 11 电脑
 
-当前阶段：R2 Luna Link 进行中；R1 枚举、自动发现、PING/PONG 和触摸上行已实机通过
+当前阶段：R4 板端天气开发与验收；R1/R2/R3 的部分长时和断线验收仍待完成
 
 > 核心产品决定：**USB 负责让 Luna 成为电脑的可靠外设；Wi-Fi 负责让 Luna
 > 成为独立的联网桌面终端。**
@@ -328,4 +328,5 @@ R3 的单活通道规则已开始实现：USB 已握手时不因单次超时改�
 
 R4 已开始将天气权威来源移到面板：Agent 仅同步地点，Luna 使用 Wi-Fi HTTPS
 获取 Open-Meteo 数据并在 NVS 保存位置和最后结果。Agent 离线、Wi-Fi 断开和
-断电重启仍需按 [R4 面板独立联网天气](../development/r4-device-weather.md) 验收。
+断电重启需按 [R4 面板独立联网天气](../development/r4-device-weather.md) 验收；
+目前已完成 Agent 停止后的 RTS 复位与独立刷新，屏幕和冷断电仍未验收。

@@ -19,13 +19,12 @@ The firmware baseline is the existing ESP-IDF v6.0.2 checkout at
 
 ## Current milestone
 
-The active milestone is **R2 Luna Link**: PC state and media actions are already
-available over USB CDC. Music cover transfer now uses USB chunks with a full
-SHA-256 check; hardware acceptance for covers and reconnects remains open.
-Wi-Fi HTTP is retained as a fallback during this migration.
-The R3 single-active-transport policy is being implemented; see
+The active implementation milestone is **R4 independent Wi-Fi weather**. PC
+state and media actions are already available over USB CDC, and R3 enforces a
+single active PC transport. Hardware acceptance for USB covers, repeated
+reconnects, and Wi-Fi fallback remains open. See
 [R3 双通道切换验证](docs/development/r3-dual-transport.md).
-R4 device-owned Wi-Fi weather is under development; see
+Device-owned weather has passed an Agent-offline reboot smoke test; see
 [R4 面板独立联网天气](docs/development/r4-device-weather.md).
 
 Implementation and hardware acceptance steps are in
