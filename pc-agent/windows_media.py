@@ -17,6 +17,8 @@ from winrt.windows.storage.streams import DataReader
 
 
 MAX_COVER_BYTES = 256 * 1024
+PLAYBACK_RECONCILE_SECONDS = 2.5
+PLAYBACK_RETRY_SECONDS = 0.4
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,8 @@ class WindowsMediaAdapter:
         self._manager: MediaSessionManager | None = None
         self._action_lock: asyncio.Lock | None = None
         self._startup_error: BaseException | None = None
+        self._playback_generation = 0
+        self._playback_reconcile_task: asyncio.Task[None] | None = None
         self._thread = threading.Thread(
             target=self._thread_main,
             name="luna-windows-media",
@@ -206,6 +210,40 @@ class WindowsMediaAdapter:
             await self._refresh()
             await asyncio.sleep(0.5)
 
+    async def _reconcile_playback(self, session: MediaSession, desired: bool,
+                                  generation: int) -> None:
+        """Keep the latest explicit command effective while the player catches up."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + PLAYBACK_RECONCILE_SECONDS
+        last_sent = loop.time()
+        retries = 0
+        while loop.time() < deadline and retries < 3:
+            await asyncio.sleep(0.1)
+            if generation != self._playback_generation:
+                return
+            try:
+                playing = session.get_playback_info().playback_status == PlaybackStatus.PLAYING
+            except Exception:
+                return
+            if playing == desired or loop.time() - last_sent < PLAYBACK_RETRY_SECONDS:
+                continue
+            if self._action_lock is None:
+                return
+            async with self._action_lock:
+                if generation != self._playback_generation:
+                    return
+                try:
+                    accepted = (await session.try_play_async() if desired
+                                else await session.try_pause_async())
+                except Exception:
+                    return
+                last_sent = loop.time()
+                retries += 1
+                print(f"Luna media reconcile: {'play' if desired else 'pause'} "
+                      f"retry={retries} accepted={bool(accepted)}")
+                if accepted:
+                    await self._refresh()
+
     async def _execute(self, action: str) -> bool:
         if self._action_lock is None:
             return False
@@ -214,22 +252,18 @@ class WindowsMediaAdapter:
             if session is None:
                 return False
 
+            self._playback_generation += 1
+            generation = self._playback_generation
+            if self._playback_reconcile_task is not None:
+                self._playback_reconcile_task.cancel()
+                self._playback_reconcile_task = None
+
             playback = session.get_playback_info()
             controls = playback.controls
             if action == "music.play":
-                if playback.playback_status == PlaybackStatus.PLAYING:
-                    accepted = True
-                elif controls.is_play_enabled:
-                    accepted = await session.try_play_async()
-                else:
-                    return False
+                accepted = await session.try_play_async()
             elif action == "music.pause":
-                if playback.playback_status != PlaybackStatus.PLAYING:
-                    accepted = True
-                elif controls.is_pause_enabled:
-                    accepted = await session.try_pause_async()
-                else:
-                    return False
+                accepted = await session.try_pause_async()
             elif action == "music.play_pause":
                 if playback.playback_status == PlaybackStatus.PLAYING:
                     accepted = await session.try_pause_async()
@@ -241,6 +275,11 @@ class WindowsMediaAdapter:
                 accepted = await session.try_skip_next_async()
             else:
                 return False
+
+            if accepted and action in {"music.play", "music.pause"}:
+                self._playback_reconcile_task = asyncio.create_task(
+                    self._reconcile_playback(session, action == "music.play", generation)
+                )
 
             await asyncio.sleep(0.2)
             await self._refresh()

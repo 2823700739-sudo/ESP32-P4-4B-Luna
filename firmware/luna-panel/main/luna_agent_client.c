@@ -567,12 +567,15 @@ esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int va
         if (usb_result == ESP_OK) {
             usb_response->data[usb_length] = '\0';
             usb_result = parse_action_response(usb_response->data, action_result);
+            free(usb_response);
+            if (usb_result == ESP_OK) {
+                ESP_LOGI(TAG, "Agent action delivered over USB: %s", action);
+            } else {
+                ESP_LOGW(TAG, "Agent rejected USB action: %s", action);
+            }
+            return usb_result;
         }
         free(usb_response);
-        if (usb_result == ESP_OK) {
-            ESP_LOGI(TAG, "Agent action delivered over USB: %s", action);
-            return ESP_OK;
-        }
         ESP_LOGW(TAG, "USB action failed, trying HTTP: %s", esp_err_to_name(usb_result));
     }
 
