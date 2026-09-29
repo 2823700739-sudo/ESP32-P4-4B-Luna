@@ -25,6 +25,8 @@ SHA-256 check; hardware acceptance for covers and reconnects remains open.
 Wi-Fi HTTP is retained as a fallback during this migration.
 The R3 single-active-transport policy is being implemented; see
 [R3 双通道切换验证](docs/development/r3-dual-transport.md).
+R4 device-owned Wi-Fi weather is under development; see
+[R4 面板独立联网天气](docs/development/r4-device-weather.md).
 
 Implementation and hardware acceptance steps are in
 [R1 USB P0 实机验证](docs/development/r1-usb-p0.md).

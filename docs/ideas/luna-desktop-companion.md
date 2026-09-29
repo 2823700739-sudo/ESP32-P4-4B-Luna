@@ -325,3 +325,7 @@ R2 已将状态、动作和封面代码迁移到 USB：正式 Windows Agent 自�
 R3 的单活通道规则已开始实现：USB 已握手时不因单次超时改走 HTTP；已发出的 USB
 动作不跨通道重放，状态快照记录实际来源并显示在首页与诊断页。拔线回退、重连和
 动作中途断线仍需按 [R3 双通道验证](../development/r3-dual-transport.md) 实机验收。
+
+R4 已开始将天气权威来源移到面板：Agent 仅同步地点，Luna 使用 Wi-Fi HTTPS
+获取 Open-Meteo 数据并在 NVS 保存位置和最后结果。Agent 离线、Wi-Fi 断开和
+断电重启仍需按 [R4 面板独立联网天气](../development/r4-device-weather.md) 验收。

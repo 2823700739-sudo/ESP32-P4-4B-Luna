@@ -51,6 +51,8 @@ class FakeWeather:
             "configured": True,
             "available": True,
             "stale": False,
+            "latitude": 22.551,
+            "longitude": 114.111,
             "temperature_c": 23,
             "location": "Test",
             "condition": "Clear",
@@ -106,7 +108,14 @@ class AgentStateTests(unittest.TestCase):
         ).encode("utf-8")
         self.assertLessEqual(len(encoded), MAX_PAYLOAD)
 
+    def test_state_provides_location_for_device_weather(self) -> None:
+        agent, _volume = make_agent()
+        weather = agent.snapshot()["weather"]
+
+        self.assertTrue(weather["configured"])
+        self.assertEqual(weather["latitude"], 22.551)
+        self.assertEqual(weather["longitude"], 114.111)
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -30,6 +30,7 @@
 #include "lvgl.h"
 #include "luna_agent_client.h"
 #include "luna_usb.h"
+#include "luna_weather.h"
 #include "nvs_flash.h"
 
 #define UI_QUEUE_DEPTH 16
@@ -1755,11 +1756,18 @@ static void sync_music_cover(const luna_music_state_t *music)
     }
 }
 
+static void weather_update_handler(const luna_weather_state_t *weather, void *context)
+{
+    (void)context;
+    ui_post_extended(LUNA_COMPONENT_WEATHER,
+                     weather->available && !weather->stale
+                         ? LUNA_STATUS_READY : LUNA_STATUS_WARNING,
+                     weather->summary, weather->details, weather->temperature_c);
+}
+
 static void agent_sync_task(void *arg)
 {
     (void)arg;
-    luna_weather_state_t last_weather = {0};
-    bool have_last_weather = false;
     while (true) {
         luna_agent_state_t state;
         const esp_err_t result = luna_agent_fetch_state(&state);
@@ -1778,26 +1786,12 @@ static void agent_sync_task(void *arg)
                              state.codex.remaining_percent);
             ui_post_extended(LUNA_COMPONENT_PROJECT, LUNA_STATUS_READY, state.project.name,
                              state.project.path, 0);
-            ui_post_extended(LUNA_COMPONENT_WEATHER,
-                             state.weather.available && !state.weather.stale
-                                 ? LUNA_STATUS_READY
-                                 : LUNA_STATUS_WARNING,
-                             state.weather.summary, state.weather.details,
-                             state.weather.temperature_c);
-            if (state.weather.available) {
-                last_weather = state.weather;
-                have_last_weather = true;
-            }
+            luna_weather_accept_pc_settings(&state.weather);
             sync_music_cover(&state.music);
         } else {
             ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_WARNING, esp_err_to_name(result), 0);
             ui_post(LUNA_COMPONENT_PC_LINK, LUNA_STATUS_WARNING,
                     luna_usb_is_ready() ? "USB stalled" : "Wi-Fi unavailable", 0);
-            if (have_last_weather) {
-                ui_post_extended(LUNA_COMPONENT_WEATHER, LUNA_STATUS_WARNING,
-                                 last_weather.summary, last_weather.details,
-                                 last_weather.temperature_c);
-            }
         }
         vTaskDelay(pdMS_TO_TICKS(CONFIG_LUNA_AGENT_POLL_SECONDS * 1000));
     }
@@ -1905,6 +1899,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         luna_agent_set_http_ready(false);
+        luna_weather_set_network_ready(false);
         if (!luna_usb_is_ready()) {
             ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_WARNING, "Waiting for Wi-Fi", 0);
         }
@@ -1928,6 +1923,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         snprintf(detail, sizeof(detail), "Wi-Fi IPv4: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
         luna_agent_set_http_ready(true);
+        luna_weather_set_network_ready(true);
         ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_READY, detail, 0);
         if (luna_agent_is_configured()) {
             start_agent_sync_task();
@@ -2201,14 +2197,14 @@ void app_main(void)
         ESP_LOGE(TAG, "USB startup failed: %s", esp_err_to_name(error));
         ui_post(LUNA_COMPONENT_USB, LUNA_STATUS_FAILED, esp_err_to_name(error), 0);
     }
-    start_agent_sync_task();
-
     error = nvs_flash_init();
     if (error == ESP_ERR_NVS_NO_FREE_PAGES || error == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         error = nvs_flash_init();
     }
     ESP_ERROR_CHECK(error);
+    ESP_ERROR_CHECK(luna_weather_start(weather_update_handler, NULL));
+    start_agent_sync_task();
 
     ESP_ERROR_CHECK(xTaskCreate(hardware_test_task, "hardware_test", 6144, NULL, 5, NULL) == pdPASS
                         ? ESP_OK

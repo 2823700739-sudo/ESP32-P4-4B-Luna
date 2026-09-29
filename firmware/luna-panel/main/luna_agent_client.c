@@ -1,6 +1,7 @@
 #include "luna_agent_client.h"
 
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -251,6 +252,16 @@ static esp_err_t parse_state_response(const char *json, luna_agent_state_t *stat
         state->weather.configured = json_bool(weather, "configured", false);
         state->weather.available = json_bool(weather, "available", false);
         state->weather.stale = json_bool(weather, "stale", false);
+        const cJSON *latitude = cJSON_GetObjectItemCaseSensitive(weather, "latitude");
+        const cJSON *longitude = cJSON_GetObjectItemCaseSensitive(weather, "longitude");
+        if (cJSON_IsNumber(latitude) && cJSON_IsNumber(longitude) &&
+            isfinite(latitude->valuedouble) && isfinite(longitude->valuedouble) &&
+            latitude->valuedouble >= -90.0 && latitude->valuedouble <= 90.0 &&
+            longitude->valuedouble >= -180.0 && longitude->valuedouble <= 180.0) {
+            state->weather.coordinates_valid = true;
+            state->weather.latitude = latitude->valuedouble;
+            state->weather.longitude = longitude->valuedouble;
+        }
         state->weather.temperature_c = json_int(weather, "temperature_c", -999);
         copy_json_string(weather, "location", state->weather.location,
                          sizeof(state->weather.location), "Not configured");

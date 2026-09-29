@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "luna_agent_client.c"
         "luna_usb.c"
+        "luna_weather.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
         esp_driver_i2s

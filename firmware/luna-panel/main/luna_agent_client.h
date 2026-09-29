@@ -51,6 +51,9 @@ typedef struct {
     bool configured;
     bool available;
     bool stale;
+    bool coordinates_valid;
+    double latitude;
+    double longitude;
     int temperature_c;
     char location[LUNA_AGENT_TEXT_SHORT];
     char condition[LUNA_AGENT_TEXT_SHORT];
