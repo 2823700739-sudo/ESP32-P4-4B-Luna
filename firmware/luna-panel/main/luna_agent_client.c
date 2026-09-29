@@ -319,13 +319,20 @@ esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
         }
         free(usb_response);
         if (usb_result == ESP_OK) {
+            state->transport = LUNA_AGENT_TRANSPORT_USB;
             ESP_LOGD(TAG, "Agent state received over USB");
             return ESP_OK;
         }
-        ESP_LOGW(TAG, "USB state request failed, trying HTTP: %s",
-                 esp_err_to_name(usb_result));
+        if (luna_usb_is_ready() || (usb_result != ESP_ERR_TIMEOUT &&
+                                    usb_result != ESP_ERR_INVALID_STATE)) {
+            ESP_LOGW(TAG, "USB state request failed: %s", esp_err_to_name(usb_result));
+            return usb_result;
+        }
+        ESP_LOGW(TAG, "USB disconnected during state request; trying HTTP");
     }
 
+    ESP_RETURN_ON_FALSE(!luna_usb_is_ready(), ESP_ERR_INVALID_STATE, TAG,
+                        "USB is active; PC HTTP state request skipped");
     ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
                         "PC agent HTTP transport is not ready");
 
@@ -377,6 +384,9 @@ esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
 
     result = parse_state_response(response->data, state);
     free(response);
+    if (result == ESP_OK) {
+        state->transport = LUNA_AGENT_TRANSPORT_HTTP;
+    }
     return result;
 }
 
@@ -484,14 +494,16 @@ esp_err_t luna_agent_fetch_cover(const char *cover_id, uint8_t **data, size_t *l
             ESP_LOGI(TAG, "Music cover received over USB (%u bytes)", (unsigned)*length);
             return ESP_OK;
         }
-        if (usb_result != ESP_ERR_TIMEOUT && usb_result != ESP_ERR_INVALID_STATE) {
+        if (luna_usb_is_ready() ||
+            (usb_result != ESP_ERR_TIMEOUT && usb_result != ESP_ERR_INVALID_STATE)) {
             ESP_LOGW(TAG, "USB cover rejected: %s", esp_err_to_name(usb_result));
             return usb_result;
         }
-        ESP_LOGW(TAG, "USB cover transfer interrupted, trying HTTP: %s",
-                 esp_err_to_name(usb_result));
+        ESP_LOGW(TAG, "USB disconnected during cover transfer; trying HTTP");
     }
 
+    ESP_RETURN_ON_FALSE(!luna_usb_is_ready(), ESP_ERR_INVALID_STATE, TAG,
+                        "USB is active; PC HTTP cover request skipped");
     ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
                         "PC agent HTTP transport is not ready");
 
@@ -576,9 +588,13 @@ esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int va
             return usb_result;
         }
         free(usb_response);
-        ESP_LOGW(TAG, "USB action failed, trying HTTP: %s", esp_err_to_name(usb_result));
+        ESP_LOGW(TAG, "USB action result uncertain; not retrying over HTTP: %s",
+                 esp_err_to_name(usb_result));
+        return usb_result;
     }
 
+    ESP_RETURN_ON_FALSE(!luna_usb_is_ready(), ESP_ERR_INVALID_STATE, TAG,
+                        "USB is active; PC HTTP action skipped");
     ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
                         "PC agent HTTP transport is not ready");
 

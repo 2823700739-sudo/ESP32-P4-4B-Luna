@@ -23,6 +23,8 @@ The active milestone is **R2 Luna Link**: PC state and media actions are already
 available over USB CDC. Music cover transfer now uses USB chunks with a full
 SHA-256 check; hardware acceptance for covers and reconnects remains open.
 Wi-Fi HTTP is retained as a fallback during this migration.
+The R3 single-active-transport policy is being implemented; see
+[R3 双通道切换验证](docs/development/r3-dual-transport.md).
 
 Implementation and hardware acceptance steps are in
 [R1 USB P0 实机验证](docs/development/r1-usb-p0.md).

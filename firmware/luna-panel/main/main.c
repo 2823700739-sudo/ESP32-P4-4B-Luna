@@ -73,6 +73,7 @@ typedef enum {
     LUNA_COMPONENT_AUDIO,
     LUNA_COMPONENT_MIC,
     LUNA_COMPONENT_AGENT,
+    LUNA_COMPONENT_PC_LINK,
     LUNA_COMPONENT_MUSIC,
     LUNA_COMPONENT_VOLUME,
     LUNA_COMPONENT_CODEX,
@@ -136,6 +137,7 @@ static lv_obj_t *s_wifi_label;
 static lv_obj_t *s_usb_label;
 static lv_obj_t *s_storage_label;
 static lv_obj_t *s_audio_label;
+static lv_obj_t *s_pc_link_label;
 static lv_obj_t *s_detail_label;
 static lv_obj_t *s_touch_label;
 static lv_obj_t *s_speaker_button;
@@ -198,6 +200,8 @@ static bool s_media_action_inflight;
 static bool s_playback_requested_playing;
 static bool s_volume_set_pending;
 static int s_volume_requested_percent;
+static luna_status_t s_pc_status = LUNA_STATUS_PENDING;
+static char s_pc_link_name[24] = "waiting";
 
 static void rebuild_card_window(void);
 
@@ -304,6 +308,14 @@ static void set_component_label(lv_obj_t *label, const char *name, luna_status_t
     lv_obj_set_style_text_color(label, status_color(status), LV_PART_MAIN);
 }
 
+static void update_pc_status_labels(void)
+{
+    lv_label_set_text_fmt(s_agent_label, "PC %s (%s)", status_text(s_pc_status), s_pc_link_name);
+    lv_obj_set_style_text_color(s_agent_label, status_color(s_pc_status), LV_PART_MAIN);
+    lv_label_set_text_fmt(s_pc_link_label, "PC link: %s", s_pc_link_name);
+    lv_obj_set_style_text_color(s_pc_link_label, status_color(s_pc_status), LV_PART_MAIN);
+}
+
 static void set_media_buttons_disabled(bool disabled)
 {
     lv_obj_t *buttons[] = {
@@ -357,8 +369,12 @@ static void ui_apply_event(const luna_ui_event_t *event)
         lv_label_set_text_fmt(s_mic_value_label, "Mic %d%%", event->value);
         return;
     case LUNA_COMPONENT_AGENT:
-        lv_label_set_text_fmt(s_agent_label, "PC %s", status_text(event->status));
-        lv_obj_set_style_text_color(s_agent_label, status_color(event->status), LV_PART_MAIN);
+        s_pc_status = event->status;
+        update_pc_status_labels();
+        return;
+    case LUNA_COMPONENT_PC_LINK:
+        strlcpy(s_pc_link_name, event->detail, sizeof(s_pc_link_name));
+        update_pc_status_labels();
         return;
     case LUNA_COMPONENT_MUSIC:
         s_music_authoritative_playing = event->value == 1;
@@ -1644,6 +1660,7 @@ static esp_err_t ui_start(void)
     s_usb_label = create_status_label(status_card, 60, "USB: starting");
     s_storage_label = create_status_label(status_card, 100, "TF card: starting");
     s_audio_label = create_status_label(status_card, 140, "Audio: starting");
+    s_pc_link_label = create_status_label(status_card, 230, "PC link: waiting");
 
     s_mic_value_label = lv_label_create(status_card);
     lv_label_set_text(s_mic_value_label, "Mic 0%");
@@ -1748,6 +1765,8 @@ static void agent_sync_task(void *arg)
         const esp_err_t result = luna_agent_fetch_state(&state);
         if (result == ESP_OK) {
             ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_READY, state.pc.name, 0);
+            ui_post(LUNA_COMPONENT_PC_LINK, LUNA_STATUS_READY,
+                    state.transport == LUNA_AGENT_TRANSPORT_USB ? "USB" : "Wi-Fi HTTP", 0);
             ui_post_extended(LUNA_COMPONENT_MUSIC,
                              state.music.controllable ? LUNA_STATUS_READY : LUNA_STATUS_WARNING,
                              state.music.title, state.music.artist,
@@ -1772,6 +1791,8 @@ static void agent_sync_task(void *arg)
             sync_music_cover(&state.music);
         } else {
             ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_WARNING, esp_err_to_name(result), 0);
+            ui_post(LUNA_COMPONENT_PC_LINK, LUNA_STATUS_WARNING,
+                    luna_usb_is_ready() ? "USB stalled" : "Wi-Fi unavailable", 0);
             if (have_last_weather) {
                 ui_post_extended(LUNA_COMPONENT_WEATHER, LUNA_STATUS_WARNING,
                                  last_weather.summary, last_weather.details,
@@ -1884,7 +1905,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         luna_agent_set_http_ready(false);
-        ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_WARNING, "Waiting for Wi-Fi", 0);
+        if (!luna_usb_is_ready()) {
+            ui_post(LUNA_COMPONENT_AGENT, LUNA_STATUS_WARNING, "Waiting for Wi-Fi", 0);
+        }
         if (s_wifi_retry_count < CONFIG_LUNA_WIFI_MAXIMUM_RETRY) {
             ++s_wifi_retry_count;
             char detail[UI_DETAIL_LENGTH];

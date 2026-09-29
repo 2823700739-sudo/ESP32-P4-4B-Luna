@@ -59,9 +59,16 @@ typedef struct {
     char details[LUNA_AGENT_TEXT_WEATHER];
 } luna_weather_state_t;
 
+typedef enum {
+    LUNA_AGENT_TRANSPORT_NONE,
+    LUNA_AGENT_TRANSPORT_USB,
+    LUNA_AGENT_TRANSPORT_HTTP,
+} luna_agent_transport_t;
+
 typedef struct {
     uint32_t sequence;
     char generated_at[LUNA_AGENT_TEXT_SHORT];
+    luna_agent_transport_t transport;
     luna_pc_state_t pc;
     luna_music_state_t music;
     luna_volume_state_t volume;

@@ -321,3 +321,7 @@ R2 已将状态、动作和封面代码迁移到 USB：正式 Windows Agent 自�
 `ACTION_REQUEST/ACTION_RESULT` 执行白名单动作，并保留相同 `request_id` 的去重语义。
 封面通过 `COVER_INFO` 和 `COVER_CHUNK` 按块读取，整图核对 SHA-256。状态快照已在实机
 连通；封面显示速度、切歌与断线恢复仍需实机验收。
+
+R3 的单活通道规则已开始实现：USB 已握手时不因单次超时改走 HTTP；已发出的 USB
+动作不跨通道重放，状态快照记录实际来源并显示在首页与诊断页。拔线回退、重连和
+动作中途断线仍需按 [R3 双通道验证](../development/r3-dual-transport.md) 实机验收。
