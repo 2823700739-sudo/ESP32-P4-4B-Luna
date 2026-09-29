@@ -28,6 +28,7 @@ class FakeSession:
         self.play_calls = 0
         self.pause_calls = 0
         self.delay_first_play = False
+        self.reject_pause_while_paused = False
 
     def get_playback_info(self) -> FakePlaybackInfo:
         return FakePlaybackInfo(self.status)
@@ -44,6 +45,8 @@ class FakeSession:
 
     async def try_pause_async(self) -> bool:
         self.pause_calls += 1
+        if self.reject_pause_while_paused and self.status == PlaybackStatus.PAUSED:
+            return False
         self.status = PlaybackStatus.PAUSED
         return True
 
@@ -79,6 +82,20 @@ class WindowsMediaCommandTests(unittest.TestCase):
     def test_rapid_play_then_pause_overrides_late_playback_update(self) -> None:
         session = FakeSession(PlaybackStatus.PAUSED)
         session.delay_first_play = True
+
+        with patch("windows_media.PLAYBACK_RECONCILE_SECONDS", 0.9), patch(
+            "windows_media.PLAYBACK_RETRY_SECONDS", 0.35
+        ):
+            asyncio.run(run_actions(session, "music.play", "music.pause",
+                                    settle_seconds=0.7))
+
+        self.assertEqual(session.status, PlaybackStatus.PAUSED)
+        self.assertGreaterEqual(session.pause_calls, 2)
+
+    def test_rapid_pause_still_wins_if_player_rejects_stale_noop(self) -> None:
+        session = FakeSession(PlaybackStatus.PAUSED)
+        session.delay_first_play = True
+        session.reject_pause_while_paused = True
 
         with patch("windows_media.PLAYBACK_RECONCILE_SECONDS", 0.9), patch(
             "windows_media.PLAYBACK_RETRY_SECONDS", 0.35

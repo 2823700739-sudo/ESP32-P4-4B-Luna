@@ -262,8 +262,12 @@ class WindowsMediaAdapter:
             controls = playback.controls
             if action == "music.play":
                 accepted = await session.try_play_async()
+                if not accepted:
+                    accepted = session.get_playback_info().playback_status == PlaybackStatus.PLAYING
             elif action == "music.pause":
                 accepted = await session.try_pause_async()
+                if not accepted:
+                    accepted = session.get_playback_info().playback_status != PlaybackStatus.PLAYING
             elif action == "music.play_pause":
                 if playback.playback_status == PlaybackStatus.PLAYING:
                     accepted = await session.try_pause_async()
