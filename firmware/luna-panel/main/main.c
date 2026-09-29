@@ -1721,7 +1721,7 @@ static void sync_music_cover(const luna_music_state_t *music)
 
     uint8_t *data = NULL;
     size_t length = 0;
-    const esp_err_t result = luna_agent_fetch_cover(&data, &length);
+    const esp_err_t result = luna_agent_fetch_cover(music->cover_id, &data, &length);
     if (result != ESP_OK) {
         ESP_LOGW(TAG, "Music cover fetch failed: %s", esp_err_to_name(result));
         return;

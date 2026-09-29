@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import struct
 import threading
 import time
 from typing import Any, Protocol
@@ -14,6 +16,8 @@ from luna_usb_probe import open_luna, read_frames
 
 
 class AgentApi(Protocol):
+    media: Any
+
     def snapshot(self) -> dict[str, Any]: ...
 
     def execute(self, request_id: str, action: str, value: Any = None) -> dict[str, Any]: ...
@@ -34,6 +38,7 @@ class LunaUsbTransport:
         self._thread: threading.Thread | None = None
         self._state_requests = 0
         self._action_requests = 0
+        self._cover_requests = 0
 
     def start(self) -> None:
         if self._thread is not None:
@@ -69,6 +74,32 @@ class LunaUsbTransport:
                 )
             return
 
+        if frame.message_type == MessageType.COVER_INFO_REQUEST:
+            data, _content_type, cover_id = self.agent.media.cover()
+            if (len(frame.payload) != 16 or
+                    frame.payload != cover_id.encode("ascii") or
+                    not data or len(data) > 256 * 1024):
+                payload = bytes(36)
+            else:
+                payload = struct.pack("<I", len(data)) + hashlib.sha256(data).digest()
+            self._send_bytes(port, MessageType.COVER_INFO, frame.request_id, payload)
+            return
+
+        if frame.message_type == MessageType.COVER_CHUNK_REQUEST:
+            payload = b""
+            if len(frame.payload) == 22:
+                requested_id = frame.payload[:16]
+                offset, chunk_size = struct.unpack_from("<IH", frame.payload, 16)
+                data, _content_type, cover_id = self.agent.media.cover()
+                if (requested_id == cover_id.encode("ascii") and
+                        0 < chunk_size <= 2048 and offset < len(data)):
+                    payload = struct.pack("<I", offset) + data[offset:offset + chunk_size]
+            self._send_bytes(port, MessageType.COVER_CHUNK, frame.request_id, payload)
+            self._cover_requests += 1
+            if self._cover_requests == 1 or self._cover_requests % 100 == 0:
+                print(f"Luna USB cover chunks served: count={self._cover_requests}")
+            return
+
         if frame.message_type == MessageType.ACTION_REQUEST:
             try:
                 request = json.loads(frame.payload.decode("utf-8"))
@@ -89,6 +120,14 @@ class LunaUsbTransport:
 
         if frame.message_type == MessageType.TOUCH_TEST:
             print(f"Luna USB touch: {frame.payload.decode('utf-8', errors='replace')}")
+
+    @staticmethod
+    def _send_bytes(port: serial.Serial, message_type: MessageType,
+                    request_id: int, payload: bytes) -> None:
+        frame = encode_frame(message_type, request_id, payload)
+        if port.write(frame) != len(frame):
+            raise serial.SerialTimeoutException("short USB write")
+        port.flush()
 
     def _serve(self, port: serial.Serial, decoder: FrameDecoder) -> None:
         while not self._stop.is_set():

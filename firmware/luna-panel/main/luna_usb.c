@@ -335,6 +335,8 @@ static void process_message(uint8_t type, uint32_t request_id, const uint8_t *pa
         break;
     case LUNA_LINK_MESSAGE_STATE_SNAPSHOT:
     case LUNA_LINK_MESSAGE_ACTION_RESULT:
+    case LUNA_LINK_MESSAGE_COVER_INFO:
+    case LUNA_LINK_MESSAGE_COVER_CHUNK:
         if (!complete_pending_response(type, request_id, payload, payload_length)) {
             ESP_LOGW(TAG, "Ignoring unmatched Luna Link response type=%u request=%lu",
                      (unsigned)type, (unsigned long)request_id);

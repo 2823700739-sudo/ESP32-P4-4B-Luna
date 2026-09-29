@@ -2,10 +2,9 @@
 
 Luna is a desktop card display and touch controller for the Waveshare
 ESP32-P4-86-Panel-ETH-2RO (SKU 31570). The target board has ESP32-P4 silicon
-revision 1.3 and is powered over USB-C. The current firmware communicates with
-the Windows companion through Wi-Fi; the restarted product direction makes
-native USB OTG the reliable primary PC link and keeps Wi-Fi for independent
-network services and fallback connectivity. See the
+revision 1.3 and is powered over USB-C. The current firmware uses native USB
+OTG as the primary PC link, with Wi-Fi for independent network services and
+fallback connectivity. See the
 [product restart plan](docs/ideas/luna-desktop-companion.md).
 
 The project is split into:
@@ -20,10 +19,10 @@ The firmware baseline is the existing ESP-IDF v6.0.2 checkout at
 
 ## Current milestone
 
-The active milestone is **R1 USB P0**: enumerate Luna as a USB CDC device on
-Windows, prove bidirectional framed messages and reliable reconnects, and only
-then migrate the existing card data from HTTP to USB. The current Wi-Fi HTTP
-path remains the working baseline during this migration.
+The active milestone is **R2 Luna Link**: PC state and media actions are already
+available over USB CDC. Music cover transfer now uses USB chunks with a full
+SHA-256 check; hardware acceptance for covers and reconnects remains open.
+Wi-Fi HTTP is retained as a fallback during this migration.
 
 Implementation and hardware acceptance steps are in
 [R1 USB P0 实机验证](docs/development/r1-usb-p0.md).

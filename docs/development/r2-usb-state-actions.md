@@ -1,6 +1,6 @@
 # R2 USB 状态与动作验证
 
-本阶段把电脑状态和白名单动作迁移到 Luna Link。Windows Agent 同时保留 HTTP 服务；固件在 USB 握手成功时优先使用 USB，请求失败时临时回退 HTTP。音乐封面仍通过 HTTP 获取，后续在 R2 内单独迁移为分块 USB 传输。
+本阶段把电脑状态、白名单动作和音乐封面迁移到 Luna Link。Windows Agent 同时保留 HTTP 服务；固件在 USB 握手成功时优先使用 USB，传输中断时可临时回退 HTTP。
 
 HTTP 回退只有在设备取得 Wi-Fi IP 后才会启用。这样 USB 同步任务可以在启动早期运行，但在 `esp_netif/lwIP` 尚未就绪时不会误入 DNS/HTTP 路径；Wi-Fi 断开时也会立即关闭 HTTP 回退。
 
@@ -27,9 +27,11 @@ Luna USB state snapshot served: sequence=... count=1
 
 - `STATE_REQUEST / STATE_SNAPSHOT`：Codex、最近项目、音乐元数据、系统音量和当前天气状态；
 - `ACTION_REQUEST / ACTION_RESULT`：播放、暂停、上一首、下一首、设置音量和静音；
+- `COVER_INFO_REQUEST / COVER_INFO`：以状态快照中的 16 字符 `cover_id` 查询 JPEG 总长度和 SHA-256；
+- `COVER_CHUNK_REQUEST / COVER_CHUNK`：按偏移读取最多 2048 字节；每块核对长度和偏移，完整图片再核对 SHA-256；
 - 动作继续经过 Windows Agent 的白名单和 `request_id` 去重；
 - 单帧载荷上限为 4096 字节，帧仍包含版本、请求 ID、长度和 CRC32；
-- USB 失败时保留现有 HTTP 请求，便于迁移期回归。
+- USB 传输超时或断线时保留现有 HTTP 请求；图片缺失、长度错误或校验失败时丢弃临时图片，等待下一次状态轮询。
 
 ## 实机检查
 
@@ -43,6 +45,7 @@ Luna USB state snapshot served: sequence=... count=1
 | 白名单动作 | 面板播放、切歌、音量操作收到 USB 结果 | 待实测 |
 | 动作去重 | 相同 `request_id` 不重复执行 | 单元测试通过，待实机故障注入 |
 | USB 中断回退 | 断开 OTG 后现有 HTTP 仍可工作 | 待实测 |
-| 音乐封面 | 当前仍由 HTTP 获取 | R2 后续项 |
+| 音乐封面 | Wi-Fi 不可用时 USB 分块更新、切歌后图片与曲目匹配 | 代码与单元测试通过，待实机验证 |
+| 封面异常 | 传输中断、旧 `cover_id` 或校验失败不替换旧图 | 单元测试覆盖旧 ID；待实机故障注入 |
 
 本地编译和单元测试不能代替面板显示、Windows 媒体控制及断线恢复的实机验证。

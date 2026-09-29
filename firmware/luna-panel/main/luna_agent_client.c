@@ -13,9 +13,14 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "luna_usb.h"
+#include "psa/crypto.h"
 
 #define RESPONSE_CAPACITY (LUNA_USB_MAX_PAYLOAD + 1)
 #define COVER_CAPACITY (256 * 1024)
+#define COVER_USB_CHUNK_SIZE 2048U
+#define COVER_USB_INFO_SIZE 36U
+#define COVER_USB_CHUNK_HEADER_SIZE 4U
+#define COVER_ID_LENGTH 16U
 #define URL_CAPACITY 160
 
 typedef struct {
@@ -33,6 +38,20 @@ typedef struct {
 static const char *TAG = "luna_agent";
 static SemaphoreHandle_t s_http_mutex;
 static volatile bool s_http_ready;
+
+static uint32_t cover_read_le32(const uint8_t *data)
+{
+    return (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+}
+
+static void cover_write_le32(uint8_t *data, uint32_t value)
+{
+    data[0] = (uint8_t)value;
+    data[1] = (uint8_t)(value >> 8);
+    data[2] = (uint8_t)(value >> 16);
+    data[3] = (uint8_t)(value >> 24);
+}
 
 esp_err_t luna_agent_client_init(void)
 {
@@ -361,14 +380,120 @@ esp_err_t luna_agent_fetch_state(luna_agent_state_t *state)
     return result;
 }
 
-esp_err_t luna_agent_fetch_cover(uint8_t **data, size_t *length)
+static esp_err_t fetch_cover_usb(const char *cover_id, uint8_t **data, size_t *length)
+{
+    if (cover_id == NULL || strlen(cover_id) != COVER_ID_LENGTH) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t info[COVER_USB_INFO_SIZE];
+    size_t received = 0;
+    esp_err_t result = luna_usb_exchange(
+        LUNA_LINK_MESSAGE_COVER_INFO_REQUEST, LUNA_LINK_MESSAGE_COVER_INFO,
+        cover_id, COVER_ID_LENGTH, info, sizeof(info), &received, 2500);
+    if (result != ESP_OK) {
+        return result;
+    }
+    if (received != sizeof(info)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    const size_t total = cover_read_le32(info);
+    if (total == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (total > COVER_CAPACITY) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    static const char hex[] = "0123456789abcdef";
+    for (size_t index = 0; index < COVER_ID_LENGTH / 2; ++index) {
+        if (cover_id[index * 2] != hex[info[4 + index] >> 4] ||
+            cover_id[index * 2 + 1] != hex[info[4 + index] & 0x0f]) {
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+    }
+
+    uint8_t *cover = malloc(total);
+    uint8_t *chunk = malloc(COVER_USB_CHUNK_HEADER_SIZE + COVER_USB_CHUNK_SIZE);
+    if (cover == NULL || chunk == NULL) {
+        free(cover);
+        free(chunk);
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t offset = 0;
+    while (offset < total) {
+        const size_t requested = total - offset < COVER_USB_CHUNK_SIZE
+                                     ? total - offset : COVER_USB_CHUNK_SIZE;
+        uint8_t request[COVER_ID_LENGTH + 6];
+        memcpy(request, cover_id, COVER_ID_LENGTH);
+        cover_write_le32(request + COVER_ID_LENGTH, (uint32_t)offset);
+        request[COVER_ID_LENGTH + 4] = (uint8_t)requested;
+        request[COVER_ID_LENGTH + 5] = (uint8_t)(requested >> 8);
+        result = luna_usb_exchange(
+            LUNA_LINK_MESSAGE_COVER_CHUNK_REQUEST, LUNA_LINK_MESSAGE_COVER_CHUNK,
+            request, sizeof(request), chunk, COVER_USB_CHUNK_HEADER_SIZE + COVER_USB_CHUNK_SIZE,
+            &received, 2500);
+        if (result != ESP_OK) {
+            break;
+        }
+        if (received != COVER_USB_CHUNK_HEADER_SIZE + requested ||
+            cover_read_le32(chunk) != offset) {
+            result = ESP_ERR_INVALID_RESPONSE;
+            break;
+        }
+        memcpy(cover + offset, chunk + COVER_USB_CHUNK_HEADER_SIZE, requested);
+        offset += requested;
+    }
+    free(chunk);
+
+    if (result == ESP_OK) {
+        uint8_t digest[32];
+        size_t digest_length = 0;
+        if (psa_crypto_init() != PSA_SUCCESS ||
+            psa_hash_compute(PSA_ALG_SHA_256, cover, total, digest, sizeof(digest),
+                             &digest_length) != PSA_SUCCESS ||
+            digest_length != sizeof(digest)) {
+            result = ESP_FAIL;
+        } else if (memcmp(digest, info + 4, sizeof(digest)) != 0) {
+            result = ESP_ERR_INVALID_CRC;
+        } else if (total < 2 || cover[0] != 0xff || cover[1] != 0xd8) {
+            result = ESP_ERR_INVALID_RESPONSE;
+        }
+    }
+
+    if (result != ESP_OK) {
+        free(cover);
+        return result;
+    }
+    *data = cover;
+    *length = total;
+    return ESP_OK;
+}
+
+esp_err_t luna_agent_fetch_cover(const char *cover_id, uint8_t **data, size_t *length)
 {
     ESP_RETURN_ON_FALSE(data != NULL && length != NULL, ESP_ERR_INVALID_ARG, TAG,
                         "Cover output pointer is null");
-    ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
-                        "PC agent HTTP transport is not ready");
     *data = NULL;
     *length = 0;
+
+    if (luna_usb_is_ready()) {
+        const esp_err_t usb_result = fetch_cover_usb(cover_id, data, length);
+        if (usb_result == ESP_OK) {
+            ESP_LOGI(TAG, "Music cover received over USB (%u bytes)", (unsigned)*length);
+            return ESP_OK;
+        }
+        if (usb_result != ESP_ERR_TIMEOUT && usb_result != ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(TAG, "USB cover rejected: %s", esp_err_to_name(usb_result));
+            return usb_result;
+        }
+        ESP_LOGW(TAG, "USB cover transfer interrupted, trying HTTP: %s",
+                 esp_err_to_name(usb_result));
+    }
+
+    ESP_RETURN_ON_FALSE(s_http_ready && luna_agent_is_configured(), ESP_ERR_INVALID_STATE, TAG,
+                        "PC agent HTTP transport is not ready");
 
     char url[URL_CAPACITY];
     ESP_RETURN_ON_FALSE(build_url(url, sizeof(url), "/api/v1/music/cover"),

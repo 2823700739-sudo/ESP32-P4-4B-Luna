@@ -81,6 +81,6 @@ bool luna_agent_is_configured(void);
 void luna_agent_set_http_ready(bool ready);
 esp_err_t luna_agent_client_init(void);
 esp_err_t luna_agent_fetch_state(luna_agent_state_t *state);
-esp_err_t luna_agent_fetch_cover(uint8_t **data, size_t *length);
+esp_err_t luna_agent_fetch_cover(const char *cover_id, uint8_t **data, size_t *length);
 esp_err_t luna_agent_send_action(const char *action, uint64_t request_id, int value,
                                  luna_agent_action_result_t *result);

@@ -13,5 +13,6 @@ idf_component_register(
         esp_wifi
         fatfs
         espressif__cjson
+        mbedtls
         nvs_flash
 )

@@ -97,8 +97,8 @@ PC 两条通道都离线 -> 保留本地与联网卡牌，电脑卡牌明确显�
 | 天气卡 | 已实现 Open-Meteo、20 分钟刷新和 PC 侧缓存 | UI 保留；数据获取迁移到面板 Wi-Fi |
 | 时钟卡 | 已实现面板 Wi-Fi NTP 校时和本地走时 | 保留 |
 | 硬件诊断 | 已实现 Wi-Fi、USB、TF 卡、音频和麦克风电平状态 | 后续增加传输统计 |
-| Windows Agent | HTTP 业务接口保留；正式 Agent 已接入 USB 自动发现、状态和动作传输 | 继续增加封面分块与统计 |
-| PC 通信 | USB 状态/动作优先及 HTTP 迁移期回退已通过构建，待 R2 实板验证 | 完成实测后迁移封面 |
+| Windows Agent | HTTP 业务接口保留；正式 Agent 已接入 USB 自动发现、状态、动作和封面分块传输 | 继续增加传输统计 |
+| PC 通信 | USB 状态/动作实机已连通；封面分块与校验通过构建及单元测试 | 完成封面与断线恢复实机验收 |
 | USB OTG 应用 | TinyUSB CDC 已初始化，Windows COM28 实机枚举并双向通信 | 继续触摸与重连验收 |
 | 离线语音 | 已从当前固件移除，麦克风电平保留 | 暂停，不进入首版 |
 
@@ -303,9 +303,8 @@ ESP32-P4 具有 USB 2.0 OTG Host/Device 能力；芯片能力和官方示例只�
 
 ## 12. 紧接着执行的开发任务
 
-当前开发工作固定为 **R1 USB P0**，在迁移任何卡牌业务之前只验证链路。2026-09-27
-已完成固件烧录、Windows 枚举、自动发现、协议握手、连续 PING/PONG 和触摸上行；
-稳定性验收仍待完成：
+R1 USB P0 已于 2026-09-27 完成固件烧录、Windows 枚举、自动发现、协议握手、
+连续 PING/PONG 和触摸上行；稳定性验收仍待完成：
 
 1. [x] 确认 OTG 数据口、Windows 枚举信息和芯片 USB 控制器配置；供电方式仍待断电测试；
 2. [x] 在 Luna 固件加入最小 USB Device/CDC 组件，不改动现有四卡业务；
@@ -313,12 +312,12 @@ ESP32-P4 具有 USB 2.0 OTG Host/Device 能力；芯片能力和官方示例只�
 4. [x] Windows 向 Luna 发送带序号的 `ping`，Luna 返回 `pong`；
 5. [x] Luna 触摸测试按钮后向 Windows 发送一条动作测试消息；
 6. [ ] 记录 20 次拔插、冷启动和 Agent 重启结果；
-7. P0 通过后再开始抽象现有 HTTP 客户端并迁移真实状态。
+7. [x] 抽象现有 HTTP 客户端并迁移真实状态。
 
 R1 未完成前，不并行加入 HID、UAC、OTA、手机配置或扩展屏功能。
 
-R2 第一批状态与动作代码已完成本地构建和单元测试：正式 Windows Agent 自动占用 Luna
-CDC，固件通过 `STATE_REQUEST/STATE_SNAPSHOT` 获取卡片状态，通过
+R2 已将状态、动作和封面代码迁移到 USB：正式 Windows Agent 自动占用 Luna CDC，
+固件通过 `STATE_REQUEST/STATE_SNAPSHOT` 获取卡片状态，通过
 `ACTION_REQUEST/ACTION_RESULT` 执行白名单动作，并保留相同 `request_id` 的去重语义。
-实板验证需要先停止独立 USB 探针并接回 USB TO UART 烧录线。封面仍由 HTTP 获取，待
-状态与动作实测通过后再加入 USB 分块、总长度与哈希校验。
+封面通过 `COVER_INFO` 和 `COVER_CHUNK` 按块读取，整图核对 SHA-256。状态快照已在实机
+连通；封面显示速度、切歌与断线恢复仍需实机验收。

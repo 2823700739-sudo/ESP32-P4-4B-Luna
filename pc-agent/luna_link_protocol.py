@@ -25,6 +25,10 @@ class MessageType(IntEnum):
     STATE_SNAPSHOT = 7
     ACTION_REQUEST = 8
     ACTION_RESULT = 9
+    COVER_INFO_REQUEST = 10
+    COVER_INFO = 11
+    COVER_CHUNK_REQUEST = 12
+    COVER_CHUNK = 13
 
 
 @dataclass(frozen=True, slots=True)

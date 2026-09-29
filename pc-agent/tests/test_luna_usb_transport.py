@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
+import struct
 import sys
 import unittest
 
@@ -15,6 +17,7 @@ from luna_usb_transport import LunaUsbTransport  # noqa: E402
 class FakeAgent:
     def __init__(self) -> None:
         self.actions: list[tuple[str, str, object]] = []
+        self.media = FakeMedia()
 
     def snapshot(self) -> dict:
         return {"protocol_version": 1, "sequence": 3, "pc": {"online": True}}
@@ -22,6 +25,15 @@ class FakeAgent:
     def execute(self, request_id: str, action: str, value: object = None) -> dict:
         self.actions.append((request_id, action, value))
         return {"ok": True, "action": action, "duplicate": False}
+
+
+class FakeMedia:
+    def __init__(self) -> None:
+        self.data = b"\xff\xd8" + bytes(range(256)) * 12 + b"\xff\xd9"
+        self.cover_id = hashlib.sha256(self.data).hexdigest()[:16]
+
+    def cover(self) -> tuple[bytes, str, str]:
+        return self.data, "image/jpeg", self.cover_id
 
 
 class FakePort:
@@ -81,7 +93,41 @@ class LunaUsbTransportTests(unittest.TestCase):
         response = decode_write(port)
         self.assertFalse(json.loads(response.payload)["ok"])
 
+    def test_cover_info_and_chunks_match_digest(self) -> None:
+        agent = FakeAgent()
+        port = FakePort()
+        transport = LunaUsbTransport(agent)
+        cover_id = agent.media.cover_id.encode("ascii")
+
+        transport._handle_frame(port, Frame(MessageType.COVER_INFO_REQUEST, 1, cover_id))
+        info = decode_write(port)
+        self.assertEqual(info.message_type, MessageType.COVER_INFO)
+        self.assertEqual(struct.unpack_from("<I", info.payload)[0], len(agent.media.data))
+        self.assertEqual(info.payload[4:], hashlib.sha256(agent.media.data).digest())
+
+        received = bytearray()
+        for offset in range(0, len(agent.media.data), 2048):
+            request = cover_id + struct.pack("<IH", offset, 2048)
+            transport._handle_frame(port, Frame(MessageType.COVER_CHUNK_REQUEST, offset + 2,
+                                                request))
+            chunk = decode_write(port)
+            self.assertEqual(chunk.message_type, MessageType.COVER_CHUNK)
+            self.assertEqual(struct.unpack_from("<I", chunk.payload)[0], offset)
+            received.extend(chunk.payload[4:])
+        self.assertEqual(bytes(received), agent.media.data)
+
+    def test_stale_cover_id_never_returns_new_cover(self) -> None:
+        port = FakePort()
+        transport = LunaUsbTransport(FakeAgent())
+        stale_id = b"0000000000000000"
+
+        transport._handle_frame(port, Frame(MessageType.COVER_INFO_REQUEST, 1, stale_id))
+        self.assertEqual(decode_write(port).payload, bytes(36))
+
+        request = stale_id + struct.pack("<IH", 0, 2048)
+        transport._handle_frame(port, Frame(MessageType.COVER_CHUNK_REQUEST, 2, request))
+        self.assertEqual(decode_write(port).payload, b"")
+
 
 if __name__ == "__main__":
     unittest.main()
-
