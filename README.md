@@ -19,13 +19,15 @@ The firmware baseline is the existing ESP-IDF v6.0.2 checkout at
 
 ## Current milestone
 
-The active implementation milestone is **R4 independent Wi-Fi weather**. PC
+The active implementation milestone is **R5 stability and diagnostics**. PC
 state and media actions are already available over USB CDC, and R3 enforces a
 single active PC transport. Hardware acceptance for USB covers, repeated
 reconnects, and Wi-Fi fallback remains open. See
 [R3 双通道切换验证](docs/development/r3-dual-transport.md).
 Device-owned weather has passed an Agent-offline reboot smoke test; see
 [R4 面板独立联网天气](docs/development/r4-device-weather.md).
+The first R5 changes add persistent Wi-Fi recovery and runtime diagnostics;
+see [R5 稳定性与诊断](docs/development/r5-stability.md).
 
 Implementation and hardware acceptance steps are in
 [R1 USB P0 实机验证](docs/development/r1-usb-p0.md).

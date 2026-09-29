@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,7 @@
 #include "esp_codec_dev.h"
 #include "esp_err.h"
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
@@ -67,6 +69,7 @@
 #define MEDIA_ACTION_COOLDOWN_US 450000
 #define MEDIA_FEEDBACK_US 450000
 #define ACTION_CONFIRM_US 4000000
+#define WIFI_RECOVERY_INTERVAL_US (30LL * 1000000LL)
 
 typedef enum {
     LUNA_COMPONENT_WIFI,
@@ -140,6 +143,7 @@ static lv_obj_t *s_usb_label;
 static lv_obj_t *s_storage_label;
 static lv_obj_t *s_audio_label;
 static lv_obj_t *s_pc_link_label;
+static lv_obj_t *s_runtime_label;
 static lv_obj_t *s_detail_label;
 static lv_obj_t *s_touch_label;
 static lv_obj_t *s_speaker_button;
@@ -178,6 +182,8 @@ static lv_obj_t *s_clock_date_label;
 static lv_obj_t *s_clock_status_label;
 static unsigned s_touch_count;
 static int s_wifi_retry_count;
+static esp_timer_handle_t s_wifi_recovery_timer;
+static atomic_bool s_wifi_has_ip;
 static bool s_agent_task_started;
 static esp_codec_dev_handle_t s_speaker_dev;
 static esp_codec_dev_handle_t s_microphone_dev;
@@ -1177,6 +1183,17 @@ static void clock_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
     clock_refresh();
+    if (s_runtime_label != NULL && lv_screen_active() == s_diagnostic_screen) {
+        const uint64_t uptime_seconds = (uint64_t)(esp_timer_get_time() / 1000000LL);
+        const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        const size_t min_internal = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+        lv_label_set_text_fmt(s_runtime_label,
+                              "Uptime %lluh %02llum   Internal heap %u KB (min %u KB)",
+                              (unsigned long long)(uptime_seconds / 3600),
+                              (unsigned long long)((uptime_seconds / 60) % 60),
+                              (unsigned)(free_internal / 1024),
+                              (unsigned)(min_internal / 1024));
+    }
 }
 
 static lv_obj_t *create_clock_card(int x)
@@ -1689,6 +1706,12 @@ static esp_err_t ui_start(void)
     lv_obj_set_style_text_font(s_detail_label, &lv_font_montserrat_16, LV_PART_MAIN);
     lv_obj_align(s_detail_label, LV_ALIGN_BOTTOM_MID, 0, -28);
 
+    s_runtime_label = lv_label_create(screen);
+    lv_label_set_text(s_runtime_label, "Uptime --   Internal heap --");
+    lv_obj_set_style_text_color(s_runtime_label, lv_color_hex(0x94A3B8), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_runtime_label, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(s_runtime_label, LV_ALIGN_TOP_MID, 0, 478);
+
     lv_obj_t *touch_button = create_action_button(screen, -160, "Touch / USB test",
                                                    touch_panel_event_cb);
     s_touch_label = lv_obj_get_child(touch_button, 0);
@@ -1891,6 +1914,33 @@ static void start_agent_sync_task(void)
     }
 }
 
+static void wifi_schedule_recovery(void)
+{
+    if (atomic_load(&s_wifi_has_ip) || s_wifi_recovery_timer == NULL ||
+        esp_timer_is_active(s_wifi_recovery_timer)) {
+        return;
+    }
+    const esp_err_t result = esp_timer_start_once(s_wifi_recovery_timer,
+                                                   WIFI_RECOVERY_INTERVAL_US);
+    if (result != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi recovery timer failed: %s", esp_err_to_name(result));
+    }
+}
+
+static void wifi_recovery_timer_cb(void *arg)
+{
+    (void)arg;
+    if (atomic_load(&s_wifi_has_ip)) {
+        return;
+    }
+    ESP_LOGI(TAG, "Wi-Fi recovery attempt");
+    const esp_err_t result = esp_wifi_connect();
+    if (result != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi recovery connect failed: %s", esp_err_to_name(result));
+        wifi_schedule_recovery();
+    }
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                void *event_data)
 {
@@ -1903,6 +1953,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        atomic_store(&s_wifi_has_ip, false);
         luna_agent_set_http_ready(false);
         luna_weather_set_network_ready(false);
         if (!luna_usb_is_ready()) {
@@ -1916,17 +1967,23 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_BUSY, detail, 0);
             esp_wifi_connect();
         } else {
-            ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_FAILED,
-                    "Check 2.4 GHz SSID, password, and C6 firmware", 0);
+            ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_WARNING,
+                    "Wi-Fi offline; retrying every 30 seconds", 0);
+            ESP_LOGW(TAG, "Wi-Fi immediate retries exhausted; recovery in 30 seconds");
+            wifi_schedule_recovery();
         }
         return;
     }
 
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        atomic_store(&s_wifi_has_ip, true);
         const ip_event_got_ip_t *event = event_data;
         char detail[UI_DETAIL_LENGTH];
         snprintf(detail, sizeof(detail), "Wi-Fi IPv4: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
+        if (s_wifi_recovery_timer != NULL && esp_timer_is_active(s_wifi_recovery_timer)) {
+            esp_timer_stop(s_wifi_recovery_timer);
+        }
         luna_agent_set_http_ready(true);
         luna_weather_set_network_ready(true);
         ui_post(LUNA_COMPONENT_WIFI, LUNA_STATUS_READY, detail, 0);
@@ -1964,6 +2021,13 @@ static esp_err_t wifi_start(void)
     ESP_RETURN_ON_ERROR(
         esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event_handler, NULL), TAG,
         "IP event registration failed");
+
+    const esp_timer_create_args_t recovery_timer_config = {
+        .callback = wifi_recovery_timer_cb,
+        .name = "wifi_recovery",
+    };
+    ESP_RETURN_ON_ERROR(esp_timer_create(&recovery_timer_config, &s_wifi_recovery_timer), TAG,
+                        "Wi-Fi recovery timer creation failed");
 
     wifi_config_t wifi_config = {0};
     strlcpy((char *)wifi_config.sta.ssid, CONFIG_LUNA_WIFI_SSID,

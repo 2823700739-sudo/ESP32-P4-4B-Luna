@@ -13,9 +13,11 @@ menu "Luna P0 Configuration"
             Network password used by the P0 firmware. Stored only in the generated sdkconfig.
 
     config LUNA_WIFI_MAXIMUM_RETRY
-        int "Maximum connection retries"
+        int "Maximum immediate Wi-Fi connection retries"
         default 10
         range 1 100
+        help
+            After these immediate retries, Luna keeps retrying every 30 seconds.
 
     config LUNA_AGENT_HOST
         string "Windows companion IPv4 address"
