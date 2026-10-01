@@ -30,6 +30,8 @@ The first R5 changes add persistent Wi-Fi recovery and runtime diagnostics;
 see [R5 稳定性与诊断](docs/development/r5-stability.md).
 The diagnostics screen also tracks USB opens, handshakes, exchanges, and errors
 for reconnection testing.
+Codex and music cards now mark last-known PC data when the PC link is offline;
+music and volume controls remain disabled until the link recovers.
 The Windows Agent now supports per-user login auto-start, so USB OTG plug-in
 can reconnect without manually running a script after each login; see
 [Windows 助手启动说明](pc-agent/README.md).

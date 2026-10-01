@@ -165,16 +165,20 @@ static lv_obj_t *s_music_cover_placeholder;
 static lv_obj_t *s_music_previous_button;
 static lv_obj_t *s_music_toggle_button;
 static lv_obj_t *s_music_next_button;
+static lv_obj_t *s_music_volume_button;
+static lv_obj_t *s_music_mute_button;
 static lv_obj_t *s_music_toggle_label;
 static lv_obj_t *s_music_volume_popup;
 static lv_obj_t *s_music_mute_label;
 static lv_obj_t *s_music_volume_slider;
+static lv_obj_t *s_music_pc_badge;
 static lv_obj_t *s_media_feedback_button;
 static lv_obj_t *s_codex_value_label;
 static lv_obj_t *s_codex_detail_label;
 static lv_obj_t *s_codex_reset_label;
 static lv_obj_t *s_project_name_label;
 static lv_obj_t *s_project_path_label;
+static lv_obj_t *s_codex_pc_badge;
 static lv_obj_t *s_weather_value_label;
 static lv_obj_t *s_weather_detail_label;
 static lv_obj_t *s_weather_metrics_label;
@@ -212,6 +216,7 @@ static bool s_volume_set_pending;
 static int s_volume_requested_percent;
 static volatile bool s_clock_ntp_synced;
 static luna_status_t s_pc_status = LUNA_STATUS_PENDING;
+static luna_status_t s_pc_link_status = LUNA_STATUS_PENDING;
 static char s_pc_link_name[24] = "waiting";
 
 static void rebuild_card_window(void);
@@ -329,10 +334,14 @@ static void update_pc_status_labels(void)
 
 static void set_media_buttons_disabled(bool disabled)
 {
+    disabled = disabled || s_pc_link_status != LUNA_STATUS_READY;
     lv_obj_t *buttons[] = {
         s_music_previous_button,
         s_music_toggle_button,
         s_music_next_button,
+        s_music_volume_button,
+        s_music_mute_button,
+        s_music_volume_slider,
     };
     for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i) {
         if (buttons[i] == NULL) {
@@ -342,6 +351,27 @@ static void set_media_buttons_disabled(bool disabled)
             lv_obj_add_state(buttons[i], LV_STATE_DISABLED);
         } else {
             lv_obj_remove_state(buttons[i], LV_STATE_DISABLED);
+        }
+    }
+}
+
+static void update_pc_card_badges(void)
+{
+    lv_obj_t *badges[] = {s_codex_pc_badge, s_music_pc_badge};
+    const luna_component_t components[] = {LUNA_COMPONENT_CODEX, LUNA_COMPONENT_MUSIC};
+    for (size_t index = 0; index < sizeof(badges) / sizeof(badges[0]); ++index) {
+        if (badges[index] == NULL) {
+            continue;
+        }
+        if (s_pc_link_status == LUNA_STATUS_READY) {
+            lv_obj_add_flag(badges[index], LV_OBJ_FLAG_HIDDEN);
+        } else {
+            const char *message = s_pc_link_status == LUNA_STATUS_PENDING
+                                      ? "WAITING FOR PC"
+                                      : s_latest_ui_state_valid[components[index]]
+                                            ? "PC OFFLINE - LAST KNOWN" : "PC OFFLINE - NO DATA";
+            lv_label_set_text(badges[index], message);
+            lv_obj_remove_flag(badges[index], LV_OBJ_FLAG_HIDDEN);
         }
     }
 }
@@ -384,8 +414,25 @@ static void ui_apply_event(const luna_ui_event_t *event)
         update_pc_status_labels();
         return;
     case LUNA_COMPONENT_PC_LINK:
+        s_pc_link_status = event->status;
         strlcpy(s_pc_link_name, event->detail, sizeof(s_pc_link_name));
         update_pc_status_labels();
+        update_pc_card_badges();
+        if (s_pc_link_status != LUNA_STATUS_READY) {
+            s_playback_pending = false;
+            s_volume_set_pending = false;
+            s_music_playing = s_music_authoritative_playing;
+            if (s_music_toggle_label != NULL) {
+                lv_label_set_text(s_music_toggle_label,
+                                  s_music_playing ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
+            }
+            if (s_music_volume_popup != NULL) {
+                lv_obj_add_flag(s_music_volume_popup, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        set_media_buttons_disabled(
+            s_media_action_inflight || !s_latest_ui_state_valid[LUNA_COMPONENT_MUSIC] ||
+            s_latest_ui_state[LUNA_COMPONENT_MUSIC].status != LUNA_STATUS_READY);
         return;
     case LUNA_COMPONENT_MUSIC:
         s_music_authoritative_playing = event->value == 1;
@@ -682,7 +729,8 @@ static void screen_switch_event_cb(lv_event_t *event)
 
 static void media_action_event_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED || s_action_queue == NULL) {
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || s_action_queue == NULL ||
+        s_pc_link_status != LUNA_STATUS_READY) {
         return;
     }
     luna_action_request_t request = {
@@ -733,7 +781,8 @@ static void media_action_event_cb(lv_event_t *event)
 
 static void volume_slider_event_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_RELEASED || s_action_queue == NULL) {
+    if (lv_event_get_code(event) != LV_EVENT_RELEASED || s_action_queue == NULL ||
+        s_pc_link_status != LUNA_STATUS_READY) {
         return;
     }
     const int value = lv_slider_get_value(lv_event_get_target(event));
@@ -752,7 +801,8 @@ static void volume_slider_event_cb(lv_event_t *event)
 
 static void volume_toggle_event_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED || s_music_volume_popup == NULL) {
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || s_music_volume_popup == NULL ||
+        s_pc_link_status != LUNA_STATUS_READY) {
         return;
     }
     if (lv_obj_has_flag(s_music_volume_popup, LV_OBJ_FLAG_HIDDEN)) {
@@ -786,6 +836,16 @@ static lv_obj_t *create_card_title(lv_obj_t *card, const char *text)
     lv_obj_set_style_text_color(label, lv_color_hex(0x94A3B8), LV_PART_MAIN);
     lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, 0);
     return label;
+}
+
+static lv_obj_t *create_pc_card_badge(lv_obj_t *card)
+{
+    lv_obj_t *badge = lv_label_create(card);
+    lv_label_set_text(badge, "WAITING FOR PC");
+    lv_obj_set_style_text_font(badge, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(badge, lv_color_hex(0xFBBF24), LV_PART_MAIN);
+    lv_obj_align(badge, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    return badge;
 }
 
 static void create_card_focus_veil(lv_obj_t *card, uint8_t index)
@@ -862,6 +922,7 @@ static void delete_card_object(uint8_t index)
         s_codex_reset_label = NULL;
         s_project_name_label = NULL;
         s_project_path_label = NULL;
+        s_codex_pc_badge = NULL;
         break;
     case LUNA_CARD_MUSIC:
         lv_image_set_src(s_music_cover_image, NULL);
@@ -876,10 +937,13 @@ static void delete_card_object(uint8_t index)
         s_music_previous_button = NULL;
         s_music_toggle_button = NULL;
         s_music_next_button = NULL;
+        s_music_volume_button = NULL;
+        s_music_mute_button = NULL;
         s_music_toggle_label = NULL;
         s_music_volume_popup = NULL;
         s_music_mute_label = NULL;
         s_music_volume_slider = NULL;
+        s_music_pc_badge = NULL;
         s_media_feedback_button = NULL;
         break;
     case LUNA_CARD_WEATHER:
@@ -965,6 +1029,8 @@ static lv_obj_t *create_codex_card(int x)
                                LV_PART_MAIN);
     lv_obj_set_style_text_color(s_project_path_label, lv_color_hex(0x64748B), LV_PART_MAIN);
     lv_obj_set_pos(s_project_path_label, 188, 164);
+    s_codex_pc_badge = create_pc_card_badge(card);
+    update_pc_card_badges();
     create_card_focus_veil(card, LUNA_CARD_CODEX);
     return card;
 }
@@ -1072,8 +1138,9 @@ static lv_obj_t *create_music_card(int x)
     s_music_next_button = create_media_button(
         card, 345, 342, MUSIC_BUTTON_SIZE, LV_SYMBOL_NEXT,
         media_action_event_cb, LUNA_ACTION_NEXT, false, NULL);
-    create_media_button(card, 483, 350, 48, LV_SYMBOL_VOLUME_MID,
-                        volume_toggle_event_cb, LUNA_ACTION_MUTE, false, NULL);
+    s_music_volume_button = create_media_button(card, 483, 350, 48, LV_SYMBOL_VOLUME_MID,
+                                                volume_toggle_event_cb, LUNA_ACTION_MUTE,
+                                                false, NULL);
 
     s_music_volume_popup = lv_obj_create(card);
     lv_obj_set_pos(s_music_volume_popup, 470, 69);
@@ -1084,8 +1151,9 @@ static lv_obj_t *create_music_card(int x)
     lv_obj_set_style_border_width(s_music_volume_popup, 1, LV_PART_MAIN);
     lv_obj_set_style_pad_all(s_music_volume_popup, 0, LV_PART_MAIN);
     lv_obj_clear_flag(s_music_volume_popup, LV_OBJ_FLAG_SCROLLABLE);
-    create_media_button(s_music_volume_popup, 10, 7, 50, LV_SYMBOL_VOLUME_MID,
-                        media_action_event_cb, LUNA_ACTION_MUTE, false, &s_music_mute_label);
+    s_music_mute_button = create_media_button(s_music_volume_popup, 10, 7, 50,
+                                              LV_SYMBOL_VOLUME_MID, media_action_event_cb,
+                                              LUNA_ACTION_MUTE, false, &s_music_mute_label);
     s_music_volume_slider = lv_slider_create(s_music_volume_popup);
     lv_obj_set_pos(s_music_volume_slider, 21, 67);
     lv_obj_set_size(s_music_volume_slider, 28, 122);
@@ -1100,6 +1168,8 @@ static lv_obj_t *create_music_card(int x)
     lv_obj_set_style_radius(s_music_volume_slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
     lv_obj_add_event_cb(s_music_volume_slider, volume_slider_event_cb, LV_EVENT_RELEASED, NULL);
     lv_obj_add_flag(s_music_volume_popup, LV_OBJ_FLAG_HIDDEN);
+    s_music_pc_badge = create_pc_card_badge(card);
+    update_pc_card_badges();
     set_media_buttons_disabled(true);
     ui_refresh_cover_objects();
     create_card_focus_veil(card, LUNA_CARD_MUSIC);

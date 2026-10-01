@@ -35,6 +35,9 @@ repository root:
 .\scripts\build-firmware.ps1
 ```
 
+脚本会遮盖非交互式构建输出中含本地 Wi-Fi 配置和 Agent 配对配置的行，
+避免复制构建日志时带出凭据。`menuconfig` 是交互式配置界面，不经过日志过滤。
+
 ## Configure Wi-Fi without committing credentials
 
 From `firmware/luna-panel`:

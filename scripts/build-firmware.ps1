@@ -42,13 +42,27 @@ $env:PATH = "$($idfPython.DirectoryName);$env:PATH"
 $env:IDF_PYTHON_ENV_PATH = Split-Path -Parent $idfPython.DirectoryName
 . $exportScript
 
+function Invoke-IdfRedacted {
+    param([string[]]$IdfArguments)
+
+    & idf.py @IdfArguments 2>&1 | ForEach-Object {
+        $line = [string]$_
+        if ($line -match 'LUNA_WIFI_SSID|LUNA_WIFI_PASSWORD|LUNA_AGENT_HOST|LUNA_AGENT_TOKEN') {
+            Write-Output '[ESP-IDF local credential line redacted]'
+        }
+        else {
+            Write-Output $line
+        }
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "idf.py $($IdfArguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
 Push-Location $projectPath
 try {
     if ($Action -in @('merge', 'flash-full')) {
-        & idf.py build
-        if ($LASTEXITCODE -ne 0) {
-            throw "idf.py build failed with exit code $LASTEXITCODE"
-        }
+        Invoke-IdfRedacted -IdfArguments @('build')
 
         $mergeInputs = @(
             '0x2000', (Join-Path $buildPath 'bootloader\bootloader.bin'),
@@ -74,16 +88,21 @@ try {
         }
     }
     elseif ($Action -eq 'flash-monitor') {
-        & idf.py -p $Port flash monitor
+        Invoke-IdfRedacted -IdfArguments @('-p', $Port, 'flash')
+        & idf.py -p $Port monitor
     }
-    elseif ($Action -in @('flash', 'monitor')) {
-        & idf.py -p $Port $Action
+    elseif ($Action -eq 'monitor') {
+        & idf.py -p $Port monitor
+    }
+    elseif ($Action -eq 'menuconfig') {
+        & idf.py menuconfig
     }
     else {
-        & idf.py $Action
+        $idfArguments = if ($Action -eq 'flash') { @('-p', $Port, 'flash') } else { @($Action) }
+        Invoke-IdfRedacted -IdfArguments $idfArguments
     }
 
-    if (($Action -notin @('merge', 'flash-full')) -and ($LASTEXITCODE -ne 0)) {
+    if (($Action -in @('monitor', 'menuconfig', 'flash-monitor')) -and $LASTEXITCODE -ne 0) {
         throw "idf.py $Action failed with exit code $LASTEXITCODE"
     }
 }
