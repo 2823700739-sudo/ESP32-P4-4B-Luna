@@ -15,3 +15,9 @@ Wi-Fi 连续连接失败达到 `LUNA_WIFI_MAXIMUM_RETRY` 后，不再永久停�
 | 四卡、100 次滑动、8 小时连续运行 | 待实机验收 |
 
 测试时不要把 Wi-Fi 关闭误认为 USB PC 断开。建议同时观察串口 `Wi-Fi recovery` 日志、天气卡的 `CACHED` 标记，以及 USB 音乐控制是否继续工作。
+
+## Windows Agent 登录自启动
+
+Windows 当前用户登录后自动启动 Agent，由 Agent 常驻等待 OTG 插入；USB 本身不会直接启动 Windows 程序。计划任务使用交互式用户令牌、忽略同一任务重复启动，并有 Agent 命名互斥锁防止手动启动与计划任务同时抢占 COM28。任务直接运行后台 Python 入口，停止任务时不会留下持有 COM28 的子进程。`pc-agent/manage-autostart.ps1` 可安装、查看、启动、临时停止和移除任务；后台日志写入 `pc-agent/agent.log`。
+
+2026-10-01：本机已注册 `Luna PC Agent` 登录任务，确认交互式用户、无限运行时限和重复任务忽略策略；18 项 PC Agent 测试通过，包括互斥锁重复启动测试。手动启动与计划任务竞争时，第二个实例正常退出；由任务启动时，HTTP `/health` 返回成功，COM28 完成 USB 握手与状态快照；停止任务后 COM28 可重新打开，重新启动任务后再次连接。下一次 Windows 重新登录后的自动启动、实际 OTG 拔插恢复仍待实测。

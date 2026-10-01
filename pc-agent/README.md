@@ -27,6 +27,31 @@ Codex 功能使用当前电脑已经登录的 Codex App Server，只读获取 5 
 .\pc-agent\start-agent.ps1
 ```
 
+首次安装环境和配置后，可在项目根目录执行一次：
+
+```powershell
+.\pc-agent\manage-autostart.ps1 -Mode install
+```
+
+这会为当前 Windows 用户创建登录时启动的计划任务。登录后 Agent 在后台等待；
+只需插入 Luna 的 OTG 线，Agent 就会自动识别设备并建立连接。任务使用当前用户的
+交互会话，以便读取网易云媒体状态和当前用户的 Codex 登录态，不在登录前作为系统
+服务运行。重启电脑后的自动启动仍需在本机实际重新登录验证。
+
+检查任务、临时启动或停止、取消自启动：
+
+```powershell
+.\pc-agent\manage-autostart.ps1 -Mode status
+.\pc-agent\manage-autostart.ps1 -Mode start
+.\pc-agent\manage-autostart.ps1 -Mode stop
+.\pc-agent\manage-autostart.ps1 -Mode remove
+```
+
+后台运行日志保存在被 Git 忽略的 `pc-agent/agent.log`。`stop` 只停止计划任务
+启动的实例；手动运行的 Agent 仍需在其窗口按 `Ctrl+C`。同时启动两个 Agent 时，
+单实例保护会让第二个直接退出。仓库移动到其他路径后，应重新运行 `install` 更新
+计划任务。`setup-agent.ps1` 仅首次安装或依赖变化时需要运行。
+
 本地配置和配对令牌保存在 `config.local.json` 中，该文件不会提交到 Git。
 默认服务端口是 `8765`。首次运行时，如果 Windows 防火墙弹出提示，请允许
 Python 访问专用网络。

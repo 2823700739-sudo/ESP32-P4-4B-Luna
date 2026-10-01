@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from agent_instance import single_agent_instance
 from codex_adapter import CodexAdapter
 from luna_usb_transport import LunaUsbTransport
 from weather_adapter import WeatherAdapter
@@ -260,7 +261,7 @@ class LunaServer(ThreadingHTTPServer):
         super().__init__(address, LunaRequestHandler)
 
 
-def main() -> int:
+def run_agent() -> int:
     config = load_config()
     host = str(config.get("listen_host", "0.0.0.0"))
     port = int(config.get("port", 8765))
@@ -308,6 +309,14 @@ def main() -> int:
         codex.close()
         weather.close()
     return 0
+
+
+def main() -> int:
+    with single_agent_instance() as primary:
+        if not primary:
+            print("Luna agent is already running in this Windows session.")
+            return 0
+        return run_agent()
 
 
 if __name__ == "__main__":

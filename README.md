@@ -28,6 +28,9 @@ Device-owned weather has passed an Agent-offline reboot smoke test; see
 [R4 面板独立联网天气](docs/development/r4-device-weather.md).
 The first R5 changes add persistent Wi-Fi recovery and runtime diagnostics;
 see [R5 稳定性与诊断](docs/development/r5-stability.md).
+The Windows Agent now supports per-user login auto-start, so USB OTG plug-in
+can reconnect without manually running a script after each login; see
+[Windows 助手启动说明](pc-agent/README.md).
 
 Implementation and hardware acceptance steps are in
 [R1 USB P0 实机验证](docs/development/r1-usb-p0.md).
