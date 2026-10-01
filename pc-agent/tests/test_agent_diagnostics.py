@@ -15,6 +15,7 @@ from luna_agent import LunaServer  # noqa: E402
 
 class FakeAgent:
     config = {"token": "test-token-with-at-least-20-chars"}
+    started_at = "2026-10-01T12:00:00Z"
 
 
 class FakeTransport:
@@ -44,6 +45,7 @@ class AgentDiagnosticsTests(unittest.TestCase):
 
             status, body = request({"X-Luna-Token": FakeAgent.config["token"]})
             self.assertEqual(status, 200)
+            self.assertEqual(body["agent_started_at"], FakeAgent.started_at)
             self.assertEqual(body["usb"]["connections"], 2)
             self.assertEqual(body["usb"]["state_requests"], 12)
         finally:

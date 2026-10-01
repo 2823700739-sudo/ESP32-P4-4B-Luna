@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 import struct
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -62,6 +63,9 @@ def decode_write(port: FakePort) -> Frame:
 
 
 class LunaUsbTransportTests(unittest.TestCase):
+    def test_default_idle_timeout_exceeds_maximum_panel_poll_interval(self) -> None:
+        self.assertGreater(LunaUsbTransport(FakeAgent()).idle_timeout_seconds, 60)
+
     def test_state_request_returns_snapshot(self) -> None:
         agent = FakeAgent()
         port = FakePort()
@@ -183,6 +187,34 @@ class LunaUsbTransportTests(unittest.TestCase):
         self.assertEqual(stats["disconnects"], 1)
         self.assertEqual(stats["errors_total"], 1)
         self.assertTrue(port.closed)
+
+    def test_idle_link_raises_timeout_for_reconnect(self) -> None:
+        transport = LunaUsbTransport(FakeAgent(), idle_timeout_seconds=0.03)
+        port = FakePort()
+
+        def wait_for_frame(_port: FakePort, _decoder: FrameDecoder,
+                           _deadline: float) -> list[Frame]:
+            time.sleep(0.01)
+            return []
+
+        with patch("luna_usb_transport.read_frames", side_effect=wait_for_frame):
+            with self.assertRaisesRegex(TimeoutError, "no Luna Link frames"):
+                transport._serve(port, FrameDecoder())
+
+    def test_valid_frame_resets_idle_timer(self) -> None:
+        transport = LunaUsbTransport(FakeAgent(), idle_timeout_seconds=0.03)
+        port = FakePort()
+        frames = [Frame(MessageType.TOUCH_TEST, 1, b"touch")]
+
+        def feed_then_stop(_port: FakePort, _decoder: FrameDecoder,
+                           _deadline: float) -> list[Frame]:
+            transport._stop.set()
+            return frames
+
+        with patch("luna_usb_transport.read_frames", side_effect=feed_then_stop):
+            transport._serve(port, FrameDecoder())
+
+        self.assertIsNotNone(transport.diagnostics()["last_frame_at"])
 
 
 if __name__ == "__main__":

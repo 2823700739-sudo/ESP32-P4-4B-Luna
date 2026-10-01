@@ -100,7 +100,11 @@ USB 中断时，迁移期固件可在已取得 Wi-Fi IP 后回退以下 HTTP 接
 
 除 `/health` 外均需 `X-Luna-Token`。诊断接口里的 `connected` 表示当前已完成
 Luna Link 握手；`connections` 和 `disconnects` 是本次 Agent 进程的连接会话数，
-不是物理拔插次数。`errors_total` 包括找不到设备时的重试失败，
+不是物理拔插次数。`errors_total` 包括找不到设备时的重试失败。
+握手后连续 120 秒没有收到有效 Luna Link 帧，Agent 会关闭该会话并重新握手；
+这个阈值高于设备端可配置的最长 60 秒状态轮询间隔，
+以免串口仍开着但面板通信已停滞时继续显示“已连接”；
+`last_frame_age_seconds` 可用于观察最近通信距今多久。
 `state_requests` 等计数只在成功发送对应回复后增加。Agent 重启会清零这些计数。
 
 无需占用 COM 端口即可记录长时间链路状态：
@@ -110,7 +114,7 @@ Luna Link 握手；`connections` 和 `disconnects` 是本次 Agent 进程的连�
 ```
 
 脚本只查询本机 Agent，将采样写入被 Git 忽略的 `pc-agent/usb-soak-*.csv`；
-如有断线、错误计数增加或查询失败，会在结束时报告失败。它记录 Agent
+如有断线、错误计数增加、Agent 重启或查询失败，会在结束时报告失败。它记录 Agent
 观察到的断线；采样间隔内完全未被 Agent 观察到的异常仍需结合设备
 Diagnostics 页和实际操作判断。
 

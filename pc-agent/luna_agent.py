@@ -218,7 +218,11 @@ class LunaRequestHandler(BaseHTTPRequestHandler):
             if not self._authorized():
                 self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "error": "unauthorized"})
                 return
-            self._send_json(HTTPStatus.OK, {"ok": True, "usb": self.usb_transport.diagnostics()})
+            self._send_json(HTTPStatus.OK, {
+                "ok": True,
+                "agent_started_at": self.agent.started_at,
+                "usb": self.usb_transport.diagnostics(),
+            })
             return
         if self.path == "/api/v1/music/cover":
             if not self._authorized():

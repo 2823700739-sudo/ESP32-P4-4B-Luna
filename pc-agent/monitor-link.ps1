@@ -37,10 +37,12 @@ $samples = 0
 $failures = 0
 $previousDisconnects = $null
 $previousErrors = $null
+$previousAgentStart = $null
 Write-Host "Recording Luna USB link to $outputFile"
 do {
     $sample = [ordered]@{
         timestamp_utc = (Get-Date).ToUniversalTime().ToString('o')
+        agent_started_at = ''
         connected = $false
         port = ''
         connected_seconds = ''
@@ -53,6 +55,8 @@ do {
         cover_info_requests = ''
         cover_chunk_requests = ''
         last_snapshot_at = ''
+        last_frame_at = ''
+        last_frame_age_seconds = ''
         error = ''
     }
     try {
@@ -62,20 +66,38 @@ do {
             throw 'Invalid diagnostics response.'
         }
         $usb = $result.usb
+        if ($result.agent_started_at -is [datetime]) {
+            $sample.agent_started_at = $result.agent_started_at.ToUniversalTime().ToString('o')
+        }
+        else {
+            $sample.agent_started_at = [string]$result.agent_started_at
+        }
         foreach ($key in @('connected', 'port', 'connected_seconds', 'connections',
                            'disconnects', 'errors_total', 'consecutive_errors',
                            'state_requests', 'action_requests', 'cover_info_requests',
-                           'cover_chunk_requests')) {
+                           'cover_chunk_requests', 'last_frame_age_seconds')) {
             $sample[$key] = $usb.$key
         }
-        if ($usb.last_snapshot_at -is [datetime]) {
-            $sample.last_snapshot_at = $usb.last_snapshot_at.ToUniversalTime().ToString('o')
-        }
-        else {
-            $sample.last_snapshot_at = $usb.last_snapshot_at
+        foreach ($key in @('last_snapshot_at', 'last_frame_at')) {
+            if ($usb.$key -is [datetime]) {
+                $sample[$key] = $usb.$key.ToUniversalTime().ToString('o')
+            }
+            else {
+                $sample[$key] = $usb.$key
+            }
         }
         $observations = @()
         if (-not $usb.connected) { $observations += 'USB disconnected at sample time' }
+        if ($previousAgentStart -and $sample.agent_started_at -ne $previousAgentStart) {
+            $observations += 'Agent restarted'
+        }
+        if ($null -ne $previousDisconnects -and
+            [int]$usb.disconnects -lt $previousDisconnects) {
+            $observations += 'USB disconnect counter reset'
+        }
+        if ($null -ne $previousErrors -and [int]$usb.errors_total -lt $previousErrors) {
+            $observations += 'USB error counter reset'
+        }
         if ($null -ne $previousDisconnects -and
             [int]$usb.disconnects -gt $previousDisconnects) {
             $observations += 'USB disconnect counter increased'
@@ -85,6 +107,7 @@ do {
         }
         $previousDisconnects = [int]$usb.disconnects
         $previousErrors = [int]$usb.errors_total
+        $previousAgentStart = $sample.agent_started_at
         if ($observations.Count -gt 0) {
             $sample.error = $observations -join '; '
             $failures++
@@ -104,8 +127,8 @@ do {
     }
 } while ($true)
 
-Write-Host "Samples: $samples; samples with disconnects or errors: $failures"
+Write-Host "Samples: $samples; samples with issues: $failures"
 Write-Host "CSV: $outputFile"
 if ($failures -gt 0) {
-    throw 'Luna USB link had disconnected or failed samples. Inspect the CSV.'
+    throw 'Luna link monitoring detected an issue. Inspect the CSV.'
 }

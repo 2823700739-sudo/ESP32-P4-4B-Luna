@@ -32,9 +32,11 @@ def encode_json(body: dict[str, Any]) -> bytes:
 
 
 class LunaUsbTransport:
-    def __init__(self, agent: AgentApi, retry_seconds: float = 1.0) -> None:
+    def __init__(self, agent: AgentApi, retry_seconds: float = 1.0,
+                 idle_timeout_seconds: float = 120.0) -> None:
         self.agent = agent
         self.retry_seconds = retry_seconds
+        self.idle_timeout_seconds = idle_timeout_seconds
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._stats_lock = threading.Lock()
@@ -51,6 +53,8 @@ class LunaUsbTransport:
         self._last_error: str | None = None
         self._last_error_at: str | None = None
         self._last_snapshot_at: str | None = None
+        self._last_frame_at: str | None = None
+        self._last_frame_monotonic: float | None = None
         self._state_requests = 0
         self._action_requests = 0
         self._cover_info_requests = 0
@@ -64,6 +68,8 @@ class LunaUsbTransport:
         with self._stats_lock:
             duration = (round(time.monotonic() - self._connected_since, 1)
                         if self._connected_since is not None else None)
+            frame_age = (round(time.monotonic() - self._last_frame_monotonic, 1)
+                         if self._connected and self._last_frame_monotonic is not None else None)
             return {
                 "connected": self._connected,
                 "port": self._port,
@@ -78,6 +84,9 @@ class LunaUsbTransport:
                 "last_error": self._last_error,
                 "last_error_at": self._last_error_at,
                 "last_snapshot_at": self._last_snapshot_at,
+                "last_frame_at": self._last_frame_at,
+                "last_frame_age_seconds": frame_age,
+                "idle_timeout_seconds": self.idle_timeout_seconds,
                 "state_requests": self._state_requests,
                 "action_requests": self._action_requests,
                 "cover_info_requests": self._cover_info_requests,
@@ -183,10 +192,17 @@ class LunaUsbTransport:
         port.flush()
 
     def _serve(self, port: serial.Serial, decoder: FrameDecoder) -> None:
+        last_frame_time = time.monotonic()
         while not self._stop.is_set():
             deadline = time.monotonic() + 0.25
             for frame in read_frames(port, decoder, deadline):
                 self._handle_frame(port, frame)
+                last_frame_time = time.monotonic()
+                with self._stats_lock:
+                    self._last_frame_monotonic = last_frame_time
+                    self._last_frame_at = self._utc_now()
+            if time.monotonic() - last_frame_time >= self.idle_timeout_seconds:
+                raise TimeoutError(f"no Luna Link frames for {self.idle_timeout_seconds:g}s")
 
     def _run(self) -> None:
         last_error = ""
@@ -201,6 +217,7 @@ class LunaUsbTransport:
                     self._port = str(port.port)
                     self._firmware = str(identity.get("firmware", "unknown"))
                     self._connected_since = time.monotonic()
+                    self._last_frame_monotonic = None
                     self._connections += 1
                     self._consecutive_errors = 0
                     self._last_connected_at = self._utc_now()
@@ -228,6 +245,7 @@ class LunaUsbTransport:
                         if self._connected:
                             self._connected = False
                             self._connected_since = None
+                            self._last_frame_monotonic = None
                             self._disconnects += 1
                             self._last_disconnected_at = self._utc_now()
                     try:
