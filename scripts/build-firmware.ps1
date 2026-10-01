@@ -47,7 +47,7 @@ function Invoke-IdfRedacted {
 
     & idf.py @IdfArguments 2>&1 | ForEach-Object {
         $line = [string]$_
-        if ($line -match 'LUNA_WIFI_SSID|LUNA_WIFI_PASSWORD|LUNA_AGENT_HOST|LUNA_AGENT_TOKEN') {
+        if ($line -match 'LUNA_WIFI_SSID|LUNA_WIFI_PASSWORD|LUNA_AGENT_HOST|LUNA_AGENT_TOKEN|Using default value from sdkconfig') {
             Write-Output '[ESP-IDF local credential line redacted]'
         }
         else {

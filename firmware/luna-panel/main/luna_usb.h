@@ -29,6 +29,7 @@ typedef enum {
     LUNA_LINK_MESSAGE_COVER_INFO = 11,
     LUNA_LINK_MESSAGE_COVER_CHUNK_REQUEST = 12,
     LUNA_LINK_MESSAGE_COVER_CHUNK = 13,
+    LUNA_LINK_MESSAGE_DEVICE_DIAGNOSTICS = 14,
 } luna_link_message_type_t;
 
 typedef enum {
@@ -77,6 +78,9 @@ bool luna_usb_is_ready(void);
 
 /** Read cumulative diagnostics since this firmware boot. */
 void luna_usb_get_stats(luna_usb_stats_t *stats);
+
+/** Publish a runtime snapshot to the agent without waiting for an acknowledgement. */
+esp_err_t luna_usb_send_diagnostics(bool wifi_online);
 
 /**
  * Send one request and wait for its matching response frame.

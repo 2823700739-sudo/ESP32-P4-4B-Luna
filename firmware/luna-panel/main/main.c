@@ -1894,6 +1894,13 @@ static void agent_sync_task(void *arg)
 {
     (void)arg;
     while (true) {
+        if (luna_usb_is_ready()) {
+            const esp_err_t diagnostics_result =
+                luna_usb_send_diagnostics(atomic_load(&s_wifi_has_ip));
+            if (diagnostics_result != ESP_OK) {
+                ESP_LOGD(TAG, "USB diagnostics skipped: %s", esp_err_to_name(diagnostics_result));
+            }
+        }
         luna_agent_state_t state;
         const esp_err_t result = luna_agent_fetch_state(&state);
         if (result == ESP_OK) {

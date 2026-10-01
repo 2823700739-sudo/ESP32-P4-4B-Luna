@@ -63,16 +63,17 @@ Python 访问专用网络。
 
 ```text
 Windows media session synchronization is active.
-Codex App Server synchronization is active.
-Luna USB agent connected on COM28: firmware=R2-USB
+Codex App Server synchronization is starting in the background.
+Luna USB agent connected on COM28: firmware=R5-USB
 Luna USB state snapshot served: sequence=... count=1
 ```
 
 启动时还会打印实际选中的 `Codex executable` 路径。助手会先检查 PATH，再自动
 搜索 `%LOCALAPPDATA%\OpenAI\Codex\bin` 下带版本号的桌面端目录，因此新开的
 PowerShell 没有 `codex` 命令也能正常工作。如果仍显示
-`Codex App Server is unavailable`，请确认 Codex 桌面端已经登录。助手会每
-15 秒自动重试，不可用期间面板明确显示待检查状态，不沿用旧额度冒充实时数据。
+Codex 不可用，请确认 Codex 桌面端已经登录。助手在后台读取 Codex，默认每次刷新
+完成后等待 15 秒再重试；状态和动作回复只读取缓存，不等待 App Server。首次读取、
+失败或缓存超过刷新周期时明确显示不可用，不沿用旧额度冒充实时数据。
 
 ## 配置天气地点
 
@@ -107,11 +108,19 @@ Luna Link 握手；`connections` 和 `disconnects` 是本次 Agent 进程的连�
 `last_frame_age_seconds` 可用于观察最近通信距今多久。
 `state_requests` 等计数只在成功发送对应回复后增加。Agent 重启会清零这些计数。
 
+新固件还通过 USB 发布设备自身诊断快照：`usb.device` 包含启动 ID、运行秒数、
+重启原因、固件 ELF 哈希、内部 RAM/PSRAM 和固件 USB 计数。
+`usb.device_stale` 标明是否为断线、旧会话或超过 120 秒未更新的缓存。
+详见 [设备运行状态同步](../docs/development/r5-device-diagnostics.md)。
+
 无需占用 COM 端口即可记录长时间链路状态：
 
 ```powershell
 .\pc-agent\monitor-link.ps1 -DurationSeconds 28800 -IntervalSeconds 10
 ```
+
+若要同时验收设备重启和内存记录，在上述命令后加 `-RequireDeviceDiagnostics`。
+设备刚连接时应先等待首次诊断快照到达；旧固件可继续使用原来的不带参数命令。
 
 脚本只查询本机 Agent，将采样写入被 Git 忽略的 `pc-agent/usb-soak-*.csv`；
 如有断线、错误计数增加、Agent 重启或查询失败，会在结束时报告失败。它记录 Agent

@@ -25,6 +25,10 @@ Luna USB state snapshot served: sequence=... count=1
 
 ## 当前 USB 消息
 
+R5 另增加 `DEVICE_DIAGNOSTICS`（类型 14）单向设备快照，供 Agent 记录运行时长、
+内存和固件 USB 计数；原有请求/应答编号不变。详见
+[USB 设备运行状态同步](r5-device-diagnostics.md)。
+
 - `STATE_REQUEST / STATE_SNAPSHOT`：Codex、最近项目、音乐元数据、系统音量和当前天气状态；
 - `ACTION_REQUEST / ACTION_RESULT`：播放、暂停、上一首、下一首、设置音量和静音；
 - `COVER_INFO_REQUEST / COVER_INFO`：以状态快照中的 16 字符 `cover_id` 查询 JPEG 总长度和 SHA-256；

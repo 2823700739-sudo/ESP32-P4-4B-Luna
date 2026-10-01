@@ -7,11 +7,13 @@ import hashlib
 import struct
 import threading
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
 import serial
 
+from luna_device_diagnostics import parse_device_diagnostics
 from luna_link_protocol import Frame, FrameDecoder, MAX_PAYLOAD, MessageType, encode_frame
 from luna_usb_probe import open_luna, read_frames
 
@@ -59,6 +61,13 @@ class LunaUsbTransport:
         self._action_requests = 0
         self._cover_info_requests = 0
         self._cover_requests = 0
+        self._device: dict[str, Any] | None = None
+        self._device_received_at: str | None = None
+        self._device_received_monotonic: float | None = None
+        self._device_connection: int | None = None
+        self._device_boot_changes = 0
+        self._device_diagnostics_received = 0
+        self._device_diagnostics_rejected = 0
 
     @staticmethod
     def _utc_now() -> str:
@@ -70,6 +79,11 @@ class LunaUsbTransport:
                         if self._connected_since is not None else None)
             frame_age = (round(time.monotonic() - self._last_frame_monotonic, 1)
                          if self._connected and self._last_frame_monotonic is not None else None)
+            device_age = (round(time.monotonic() - self._device_received_monotonic, 1)
+                          if self._device_received_monotonic is not None else None)
+            device_stale = (not self._connected or device_age is None or
+                            device_age >= self.idle_timeout_seconds or
+                            self._device_connection != self._connections)
             return {
                 "connected": self._connected,
                 "port": self._port,
@@ -91,6 +105,13 @@ class LunaUsbTransport:
                 "action_requests": self._action_requests,
                 "cover_info_requests": self._cover_info_requests,
                 "cover_chunk_requests": self._cover_requests,
+                "device": deepcopy(self._device),
+                "device_received_at": self._device_received_at,
+                "device_age_seconds": device_age,
+                "device_stale": device_stale,
+                "device_boot_changes": self._device_boot_changes,
+                "device_diagnostics_received": self._device_diagnostics_received,
+                "device_diagnostics_rejected": self._device_diagnostics_rejected,
             }
 
     def start(self) -> None:
@@ -114,6 +135,29 @@ class LunaUsbTransport:
         port.flush()
 
     def _handle_frame(self, port: serial.Serial, frame: Frame) -> None:
+        if frame.message_type == MessageType.DEVICE_DIAGNOSTICS:
+            try:
+                device = parse_device_diagnostics(frame.payload)
+            except (UnicodeDecodeError, ValueError) as error:
+                with self._stats_lock:
+                    self._device_diagnostics_rejected += 1
+                    rejected = self._device_diagnostics_rejected
+                if rejected == 1 or rejected % 20 == 0:
+                    print(f"Luna device diagnostics rejected: {error} count={rejected}")
+                return
+            with self._stats_lock:
+                boot_changed = self._device is not None and self._device["boot_id"] != device["boot_id"]
+                if boot_changed:
+                    self._device_boot_changes += 1
+                self._device = device
+                self._device_received_at = self._utc_now()
+                self._device_received_monotonic = time.monotonic()
+                self._device_connection = self._connections
+                self._device_diagnostics_received += 1
+            if boot_changed:
+                print(f"Luna device boot changed: reason={device['reset_reason_name']}")
+            return
+
         if frame.message_type == MessageType.STATE_REQUEST:
             snapshot = self.agent.snapshot()
             self._send_json(

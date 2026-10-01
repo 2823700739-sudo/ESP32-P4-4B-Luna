@@ -62,7 +62,89 @@ def decode_write(port: FakePort) -> Frame:
     return frames[0]
 
 
+def device_snapshot(boot_id: str = "0123456789abcdef") -> dict:
+    return {
+        "schema": 1, "boot_id": boot_id, "firmware_elf_sha256": "a" * 64,
+        "uptime_seconds": 300, "reset_reason": 1, "wifi_online": True,
+        "internal_free_bytes": 240000, "internal_min_free_bytes": 200000,
+        "internal_largest_free_bytes": 90000,
+        "psram_free_bytes": 24000000, "psram_min_free_bytes": 20000000,
+        "usb": {"cdc_opens": 1, "handshakes": 1, "exchanges_ok": 50,
+                "exchanges_failed": 0, "exchanges_timed_out": 0,
+                "protocol_errors": 0, "queue_drops": 0, "tx_errors": 0},
+    }
+
+
+def device_frame(snapshot: dict) -> Frame:
+    return Frame(MessageType.DEVICE_DIAGNOSTICS, 0, json.dumps(snapshot).encode("utf-8"))
+
+
 class LunaUsbTransportTests(unittest.TestCase):
+    def test_device_snapshot_records_memory_without_sending_a_reply(self) -> None:
+        transport = LunaUsbTransport(FakeAgent())
+        transport._connected = True
+        transport._connected_since = time.monotonic()
+        port = FakePort()
+
+        transport._handle_frame(port, device_frame(device_snapshot()))
+
+        stats = transport.diagnostics()
+        self.assertFalse(stats["device_stale"])
+        self.assertEqual(stats["device"]["internal_free_bytes"], 240000)
+        self.assertEqual(stats["device"]["reset_reason_name"], "power_on")
+        self.assertEqual(stats["device_diagnostics_received"], 1)
+        self.assertEqual(stats["device_boot_changes"], 0)
+        self.assertEqual(port.writes, [])
+
+    def test_bad_diagnostics_keep_last_good_snapshot_and_state_service_working(self) -> None:
+        transport = LunaUsbTransport(FakeAgent())
+        port = FakePort()
+        transport._handle_frame(port, device_frame(device_snapshot()))
+        malformed = [b"{", b"[]"]
+        for key, value in (("schema", 2), ("internal_free_bytes", -1),
+                           ("uptime_seconds", True), ("wifi_online", 1)):
+            snapshot = device_snapshot()
+            snapshot[key] = value
+            malformed.append(json.dumps(snapshot).encode("utf-8"))
+        for payload in malformed:
+            transport._handle_frame(port, Frame(MessageType.DEVICE_DIAGNOSTICS, 0, payload))
+        stats = transport.diagnostics()
+        self.assertEqual(stats["device_diagnostics_rejected"], len(malformed))
+        self.assertEqual(stats["device_diagnostics_received"], 1)
+        self.assertEqual(stats["device"]["internal_free_bytes"], 240000)
+        transport._handle_frame(port, Frame(MessageType.STATE_REQUEST, 17, b""))
+        self.assertEqual(decode_write(port).message_type, MessageType.STATE_SNAPSHOT)
+
+    def test_boot_change_is_distinct_from_reconnect_and_snapshot_is_copied(self) -> None:
+        transport = LunaUsbTransport(FakeAgent())
+        port = FakePort()
+        transport._handle_frame(port, device_frame(device_snapshot()))
+        transport._handle_frame(port, device_frame(device_snapshot()))
+        self.assertEqual(transport.diagnostics()["device_boot_changes"], 0)
+        transport._handle_frame(port, device_frame(device_snapshot("fedcba9876543210")))
+        self.assertEqual(transport.diagnostics()["device_boot_changes"], 1)
+        exposed = transport.diagnostics()
+        exposed["device"]["usb"]["exchanges_ok"] = 999
+        self.assertEqual(transport.diagnostics()["device"]["usb"]["exchanges_ok"], 50)
+
+    def test_cached_device_snapshot_is_stale_after_disconnect_reconnect_or_timeout(self) -> None:
+        transport = LunaUsbTransport(FakeAgent())
+        port = FakePort()
+        transport._connected = True
+        transport._handle_frame(port, device_frame(device_snapshot()))
+        self.assertFalse(transport.diagnostics()["device_stale"])
+        transport._connected = False
+        self.assertTrue(transport.diagnostics()["device_stale"])
+        transport._connected = True
+        transport._connected_since = time.monotonic()
+        transport._connections += 1
+        self.assertTrue(transport.diagnostics()["device_stale"])
+        transport._handle_frame(port, device_frame(device_snapshot()))
+        self.assertFalse(transport.diagnostics()["device_stale"])
+        with patch("luna_usb_transport.time.monotonic",
+                   return_value=transport._device_received_monotonic + 121):
+            self.assertTrue(transport.diagnostics()["device_stale"])
+
     def test_default_idle_timeout_exceeds_maximum_panel_poll_interval(self) -> None:
         self.assertGreater(LunaUsbTransport(FakeAgent()).idle_timeout_seconds, 60)
 

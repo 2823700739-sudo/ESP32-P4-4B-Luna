@@ -2,13 +2,18 @@
 
 #include "luna_usb.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdatomic.h>
 #include <string.h>
 
+#include "esp_app_desc.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -82,6 +87,7 @@ static uint8_t s_rx_stream[LUNA_USB_RX_STREAM_SIZE];
 static size_t s_rx_stream_length;
 static SemaphoreHandle_t s_pending_mutex;
 static luna_pending_exchange_t s_pending[LUNA_USB_PENDING_COUNT];
+static uint64_t s_boot_id;
 static atomic_uint_least32_t s_cdc_opens;
 static atomic_uint_least32_t s_handshakes;
 static atomic_uint_least32_t s_exchanges_ok;
@@ -332,8 +338,8 @@ static void process_message(uint8_t type, uint32_t request_id, const uint8_t *pa
     switch (type) {
     case LUNA_LINK_MESSAGE_HELLO: {
         static const char response[] =
-            "{\"device\":\"luna\",\"protocol\":1,\"firmware\":\"R2-USB\","
-            "\"capabilities\":[\"ping\",\"touch_test\",\"state\",\"action\"]}";
+            "{\"device\":\"luna\",\"protocol\":1,\"firmware\":\"R5-USB\","
+            "\"capabilities\":[\"ping\",\"touch_test\",\"state\",\"action\",\"cover\",\"diagnostics\"]}";
         if (queue_message(LUNA_LINK_MESSAGE_HELLO_ACK, request_id, response,
                           sizeof(response) - 1) == ESP_OK) {
             s_handshake_complete = true;
@@ -512,6 +518,7 @@ esp_err_t luna_usb_start(luna_usb_event_cb_t callback, void *context)
 
     s_event_callback = callback;
     s_event_context = context;
+    s_boot_id = ((uint64_t)esp_random() << 32) | esp_random();
     s_event_queue = xQueueCreate(LUNA_USB_EVENT_QUEUE_DEPTH, sizeof(luna_internal_event_t));
     if (s_event_queue == NULL) {
         return ESP_ERR_NO_MEM;
@@ -599,6 +606,44 @@ void luna_usb_get_stats(luna_usb_stats_t *stats)
         .queue_drops = atomic_load(&s_queue_drops),
         .tx_errors = atomic_load(&s_tx_errors),
     };
+}
+
+esp_err_t luna_usb_send_diagnostics(bool wifi_online)
+{
+    if (!luna_usb_is_ready()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    luna_usb_stats_t stats;
+    luna_usb_get_stats(&stats);
+    const esp_app_desc_t *app = esp_app_get_description();
+    char firmware_hash[65];
+    for (size_t index = 0; index < sizeof(app->app_elf_sha256); ++index) {
+        snprintf(firmware_hash + index * 2, 3, "%02x", app->app_elf_sha256[index]);
+    }
+    char payload[1024];
+    const int written = snprintf(
+        payload, sizeof(payload),
+        "{\"schema\":1,\"boot_id\":\"%016" PRIx64 "\",\"firmware_elf_sha256\":\"%s\","
+        "\"uptime_seconds\":%" PRIu64 ",\"reset_reason\":%d,\"wifi_online\":%s,"
+        "\"internal_free_bytes\":%u,\"internal_min_free_bytes\":%u,"
+        "\"internal_largest_free_bytes\":%u,\"psram_free_bytes\":%u,\"psram_min_free_bytes\":%u,"
+        "\"usb\":{\"cdc_opens\":%" PRIu32 ",\"handshakes\":%" PRIu32 ","
+        "\"exchanges_ok\":%" PRIu32 ",\"exchanges_failed\":%" PRIu32 ","
+        "\"exchanges_timed_out\":%" PRIu32 ",\"protocol_errors\":%" PRIu32 ","
+        "\"queue_drops\":%" PRIu32 ",\"tx_errors\":%" PRIu32 "}}",
+        s_boot_id, firmware_hash, (uint64_t)(esp_timer_get_time() / 1000000LL),
+        (int)esp_reset_reason(), wifi_online ? "true" : "false",
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM),
+        stats.cdc_opens, stats.handshakes, stats.exchanges_ok, stats.exchanges_failed,
+        stats.exchanges_timed_out, stats.protocol_errors, stats.queue_drops, stats.tx_errors);
+    if (written <= 0 || (size_t)written >= sizeof(payload)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return queue_message(LUNA_LINK_MESSAGE_DEVICE_DIAGNOSTICS, 0, payload, (size_t)written);
 }
 
 static void record_exchange_result(esp_err_t result)

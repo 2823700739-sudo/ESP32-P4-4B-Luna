@@ -294,8 +294,8 @@ def run_agent() -> int:
     )
     media.start()
     weather.start()
+    codex.start()
     print(f"Codex executable: {codex.executable}")
-    initial_codex = codex.snapshot()
     agent = AgentState(config, media, codex, weather, volume)
     usb_transport = LunaUsbTransport(agent)
     server = LunaServer((host, port), agent, usb_transport)
@@ -305,10 +305,7 @@ def run_agent() -> int:
     print("Luna USB transport is enabled." if bool(config.get("usb_enabled", True))
           else "Luna USB transport is disabled.")
     print("Windows media session synchronization is active.")
-    if initial_codex["codex"]["available"]:
-        print("Codex App Server synchronization is active.")
-    else:
-        print("Codex App Server is unavailable; the panel will show a pending state.")
+    print("Codex App Server synchronization is starting in the background.")
     if weather.configured:
         print("Open-Meteo weather synchronization is active.")
     else:

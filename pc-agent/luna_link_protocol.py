@@ -29,6 +29,7 @@ class MessageType(IntEnum):
     COVER_INFO = 11
     COVER_CHUNK_REQUEST = 12
     COVER_CHUNK = 13
+    DEVICE_DIAGNOSTICS = 14
 
 
 @dataclass(frozen=True, slots=True)

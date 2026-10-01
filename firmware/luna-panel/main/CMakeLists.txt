@@ -6,6 +6,7 @@ idf_component_register(
         "luna_weather.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
+        esp_app_format
         esp_driver_i2s
         esp_event
         esp_http_client

@@ -44,7 +44,24 @@ if ($Mode -eq 'start') {
 if ($Mode -eq 'stop') {
     if (-not $task) { throw 'Luna auto-start is not installed.' }
     if ($task.State -eq 'Running') {
+        # Task Scheduler's stop returns before pythonw releases the instance mutex.
+        # Wait only for this project's scheduled entry point, never other Python apps.
+        $agentProcesses = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.Name -eq 'pythonw.exe' -and $_.CommandLine -and
+            $_.CommandLine.IndexOf($backgroundScript, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
         Stop-ScheduledTask -TaskName $taskName -TaskPath '\'
+        $stopTimer = [Diagnostics.Stopwatch]::StartNew()
+        do {
+            $remainingProcesses = @($agentProcesses | Where-Object {
+                Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+            })
+            if ($remainingProcesses.Count -eq 0) { break }
+            if ($stopTimer.Elapsed.TotalSeconds -ge 10) {
+                throw 'Luna Agent is still stopping. Wait before starting it again.'
+            }
+            Start-Sleep -Milliseconds 100
+        } while ($true)
         Write-Host 'Luna auto-start task stopped. Login auto-start remains enabled.'
     }
     else {

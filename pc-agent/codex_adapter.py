@@ -93,7 +93,9 @@ class CodexAdapter:
         self._process: subprocess.Popen[bytes] | None = None
         self._responses: queue.Queue[dict[str, Any] | None] = queue.Queue()
         self._request_lock = threading.Lock()
-        self._refresh_lock = threading.Lock()
+        self._cache_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._refresh_thread: threading.Thread | None = None
         self._next_id = 1
         self._cached_at = 0.0
         self._cached = self._empty_snapshot()
@@ -206,6 +208,8 @@ class CodexAdapter:
 
     def _request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         with self._request_lock:
+            if self._stop_event.is_set():
+                raise RuntimeError("Codex adapter is stopping")
             try:
                 if self._process is None or self._process.poll() is not None:
                     self._start()
@@ -297,19 +301,39 @@ class CodexAdapter:
             "recent_projects": self._projects(thread_result),
         }
 
-    def snapshot(self) -> dict[str, Any]:
-        with self._refresh_lock:
-            now = time.monotonic()
-            if now - self._cached_at < self.refresh_seconds:
-                return copy.deepcopy(self._cached)
-            try:
-                self._cached = self._refresh()
-            except Exception as error:
+    def _refresh_once(self) -> None:
+        try:
+            snapshot = self._refresh()
+        except Exception as error:
+            if not self._stop_event.is_set():
                 print(f"Codex state refresh failed: {error}")
-                self._cached = self._empty_snapshot(str(error))
-            self._cached_at = now
+            snapshot = self._empty_snapshot(str(error))
+        with self._cache_lock:
+            self._cached = snapshot
+            self._cached_at = time.monotonic()
+
+    def _refresh_loop(self) -> None:
+        while not self._stop_event.is_set():
+            self._refresh_once()
+            self._stop_event.wait(self.refresh_seconds)
+
+    def start(self) -> None:
+        if self._refresh_thread is None and not self._stop_event.is_set():
+            self._refresh_thread = threading.Thread(
+                target=self._refresh_loop, name="codex-refresh", daemon=True,
+            )
+            self._refresh_thread.start()
+
+    def snapshot(self) -> dict[str, Any]:
+        # USB/HTTP readers never wait for App Server I/O or its request lock.
+        with self._cache_lock:
+            if self._cached_at == 0 or time.monotonic() - self._cached_at >= self.refresh_seconds:
+                return self._empty_snapshot("Codex refresh pending")
             return copy.deepcopy(self._cached)
 
     def close(self) -> None:
+        self._stop_event.set()
         with self._request_lock:
             self._stop()
+        if self._refresh_thread is not None:
+            self._refresh_thread.join(timeout=2)
