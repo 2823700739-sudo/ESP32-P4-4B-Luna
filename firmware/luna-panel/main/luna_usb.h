@@ -49,6 +49,17 @@ typedef struct {
 
 typedef void (*luna_usb_event_cb_t)(const luna_usb_event_t *event, void *context);
 
+typedef struct {
+    uint32_t cdc_opens;
+    uint32_t handshakes;
+    uint32_t exchanges_ok;
+    uint32_t exchanges_failed;
+    uint32_t exchanges_timed_out;
+    uint32_t protocol_errors;
+    uint32_t queue_drops;
+    uint32_t tx_errors;
+} luna_usb_stats_t;
+
 /**
  * Start Luna Link over the native USB OTG CDC interface.
  *
@@ -63,6 +74,9 @@ bool luna_usb_is_connected(void);
 
 /** Return true after the Windows agent completes the Luna Link handshake. */
 bool luna_usb_is_ready(void);
+
+/** Read cumulative diagnostics since this firmware boot. */
+void luna_usb_get_stats(luna_usb_stats_t *stats);
 
 /**
  * Send one request and wait for its matching response frame.

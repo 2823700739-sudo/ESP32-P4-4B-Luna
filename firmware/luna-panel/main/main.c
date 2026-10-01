@@ -144,6 +144,8 @@ static lv_obj_t *s_storage_label;
 static lv_obj_t *s_audio_label;
 static lv_obj_t *s_pc_link_label;
 static lv_obj_t *s_runtime_label;
+static lv_obj_t *s_usb_stats_label;
+static lv_obj_t *s_usb_errors_label;
 static lv_obj_t *s_detail_label;
 static lv_obj_t *s_touch_label;
 static lv_obj_t *s_speaker_button;
@@ -1193,6 +1195,20 @@ static void clock_timer_cb(lv_timer_t *timer)
                               (unsigned long long)((uptime_seconds / 60) % 60),
                               (unsigned)(free_internal / 1024),
                               (unsigned)(min_internal / 1024));
+        luna_usb_stats_t usb_stats;
+        luna_usb_get_stats(&usb_stats);
+        lv_label_set_text_fmt(s_usb_stats_label,
+                              "USB opens %lu  hello %lu  requests %lu ok / %lu fail",
+                              (unsigned long)usb_stats.cdc_opens,
+                              (unsigned long)usb_stats.handshakes,
+                              (unsigned long)usb_stats.exchanges_ok,
+                              (unsigned long)usb_stats.exchanges_failed);
+        lv_label_set_text_fmt(s_usb_errors_label,
+                              "Timeout %lu  protocol %lu  queue %lu  TX %lu",
+                              (unsigned long)usb_stats.exchanges_timed_out,
+                              (unsigned long)usb_stats.protocol_errors,
+                              (unsigned long)usb_stats.queue_drops,
+                              (unsigned long)usb_stats.tx_errors);
     }
 }
 
@@ -1711,6 +1727,18 @@ static esp_err_t ui_start(void)
     lv_obj_set_style_text_color(s_runtime_label, lv_color_hex(0x94A3B8), LV_PART_MAIN);
     lv_obj_set_style_text_font(s_runtime_label, &lv_font_montserrat_16, LV_PART_MAIN);
     lv_obj_align(s_runtime_label, LV_ALIGN_TOP_MID, 0, 478);
+
+    s_usb_stats_label = lv_label_create(screen);
+    lv_label_set_text(s_usb_stats_label, "USB opens --  hello --  requests --");
+    lv_obj_set_style_text_color(s_usb_stats_label, lv_color_hex(0x94A3B8), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_usb_stats_label, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(s_usb_stats_label, LV_ALIGN_TOP_MID, 0, 505);
+
+    s_usb_errors_label = lv_label_create(screen);
+    lv_label_set_text(s_usb_errors_label, "Timeout --  protocol --  queue --  TX --");
+    lv_obj_set_style_text_color(s_usb_errors_label, lv_color_hex(0x94A3B8), LV_PART_MAIN);
+    lv_obj_set_style_text_font(s_usb_errors_label, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(s_usb_errors_label, LV_ALIGN_TOP_MID, 0, 532);
 
     lv_obj_t *touch_button = create_action_button(screen, -160, "Touch / USB test",
                                                    touch_panel_event_cb);

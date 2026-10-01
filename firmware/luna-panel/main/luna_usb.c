@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -81,6 +82,14 @@ static uint8_t s_rx_stream[LUNA_USB_RX_STREAM_SIZE];
 static size_t s_rx_stream_length;
 static SemaphoreHandle_t s_pending_mutex;
 static luna_pending_exchange_t s_pending[LUNA_USB_PENDING_COUNT];
+static atomic_uint_least32_t s_cdc_opens;
+static atomic_uint_least32_t s_handshakes;
+static atomic_uint_least32_t s_exchanges_ok;
+static atomic_uint_least32_t s_exchanges_failed;
+static atomic_uint_least32_t s_exchanges_timed_out;
+static atomic_uint_least32_t s_protocol_errors;
+static atomic_uint_least32_t s_queue_drops;
+static atomic_uint_least32_t s_tx_errors;
 
 static uint32_t read_le32(const uint8_t *data)
 {
@@ -125,7 +134,11 @@ static void notify_application(luna_usb_event_type_t type, uint32_t request_id,
 
 static bool queue_internal_event(const luna_internal_event_t *event)
 {
-    return s_event_queue != NULL && xQueueSend(s_event_queue, event, 0) == pdTRUE;
+    if (s_event_queue != NULL && xQueueSend(s_event_queue, event, 0) == pdTRUE) {
+        return true;
+    }
+    atomic_fetch_add(&s_queue_drops, 1);
+    return false;
 }
 
 static void tinyusb_device_event_callback(tinyusb_event_t *event, void *arg)
@@ -281,6 +294,7 @@ static bool complete_pending_response(uint8_t type, uint32_t request_id,
         }
         if (payload_length > pending->response_capacity) {
             pending->result = ESP_ERR_INVALID_SIZE;
+            atomic_fetch_add(&s_protocol_errors, 1);
         } else {
             if (payload_length > 0) {
                 memcpy(pending->response, payload, payload_length);
@@ -323,6 +337,7 @@ static void process_message(uint8_t type, uint32_t request_id, const uint8_t *pa
         if (queue_message(LUNA_LINK_MESSAGE_HELLO_ACK, request_id, response,
                           sizeof(response) - 1) == ESP_OK) {
             s_handshake_complete = true;
+            atomic_fetch_add(&s_handshakes, 1);
             notify_application(LUNA_USB_EVENT_HANDSHAKE, request_id,
                                "Luna Link handshake complete");
         }
@@ -338,11 +353,13 @@ static void process_message(uint8_t type, uint32_t request_id, const uint8_t *pa
     case LUNA_LINK_MESSAGE_COVER_INFO:
     case LUNA_LINK_MESSAGE_COVER_CHUNK:
         if (!complete_pending_response(type, request_id, payload, payload_length)) {
+            atomic_fetch_add(&s_protocol_errors, 1);
             ESP_LOGW(TAG, "Ignoring unmatched Luna Link response type=%u request=%lu",
                      (unsigned)type, (unsigned long)request_id);
         }
         break;
     default:
+        atomic_fetch_add(&s_protocol_errors, 1);
         ESP_LOGW(TAG, "Ignoring unsupported Luna Link message type %u", (unsigned)type);
         notify_application(LUNA_USB_EVENT_ERROR, request_id, "Unsupported USB message");
         break;
@@ -375,6 +392,7 @@ static void parse_rx_stream(void)
         const uint32_t request_id = read_le32(s_rx_stream + 8);
         const uint32_t payload_length = read_le32(s_rx_stream + 12);
         if (version != LUNA_USB_PROTOCOL_VERSION || payload_length > LUNA_USB_MAX_PAYLOAD) {
+            atomic_fetch_add(&s_protocol_errors, 1);
             ESP_LOGW(TAG, "Rejecting Luna Link header version=%u payload=%u", (unsigned)version,
                      (unsigned)payload_length);
             notify_application(LUNA_USB_EVENT_ERROR, request_id, "Invalid USB frame header");
@@ -391,6 +409,7 @@ static void parse_rx_stream(void)
         const uint32_t actual_crc =
             luna_crc32(s_rx_stream, frame_length - LUNA_USB_CRC_SIZE);
         if (expected_crc != actual_crc) {
+            atomic_fetch_add(&s_protocol_errors, 1);
             ESP_LOGW(TAG, "Rejecting Luna Link frame with invalid CRC");
             notify_application(LUNA_USB_EVENT_ERROR, request_id, "USB frame CRC mismatch");
             drop_rx_prefix(1);
@@ -405,6 +424,7 @@ static void parse_rx_stream(void)
 static void append_rx_chunk(const luna_rx_chunk_t *chunk)
 {
     if (chunk->length > sizeof(s_rx_stream) - s_rx_stream_length) {
+        atomic_fetch_add(&s_protocol_errors, 1);
         ESP_LOGW(TAG, "Resetting USB RX parser after stream overflow");
         s_rx_stream_length = 0;
         notify_application(LUNA_USB_EVENT_ERROR, 0, "USB receive buffer overflow");
@@ -430,6 +450,7 @@ static void luna_usb_task(void *arg)
             const esp_err_t result = write_message(&event.data.tx);
             free(event.data.tx.payload);
             if (result != ESP_OK) {
+                atomic_fetch_add(&s_tx_errors, 1);
                 ESP_LOGW(TAG, "USB message send failed: %s", esp_err_to_name(result));
                 notify_application(LUNA_USB_EVENT_ERROR, event.data.tx.request_id,
                                    "USB message send failed");
@@ -453,6 +474,7 @@ static void luna_usb_task(void *arg)
             ESP_LOGI(TAG, "CDC line state DTR=%d RTS=%d", event.data.line_state.dtr,
                      event.data.line_state.rts);
             if (s_connected && !was_connected) {
+                atomic_fetch_add(&s_cdc_opens, 1);
                 notify_application(LUNA_USB_EVENT_CONNECTED, 0,
                                    "USB CDC open; waiting for Luna Link handshake");
             } else if (!s_connected && was_connected) {
@@ -562,6 +584,35 @@ bool luna_usb_is_ready(void)
     return s_connected && s_handshake_complete;
 }
 
+void luna_usb_get_stats(luna_usb_stats_t *stats)
+{
+    if (stats == NULL) {
+        return;
+    }
+    *stats = (luna_usb_stats_t) {
+        .cdc_opens = atomic_load(&s_cdc_opens),
+        .handshakes = atomic_load(&s_handshakes),
+        .exchanges_ok = atomic_load(&s_exchanges_ok),
+        .exchanges_failed = atomic_load(&s_exchanges_failed),
+        .exchanges_timed_out = atomic_load(&s_exchanges_timed_out),
+        .protocol_errors = atomic_load(&s_protocol_errors),
+        .queue_drops = atomic_load(&s_queue_drops),
+        .tx_errors = atomic_load(&s_tx_errors),
+    };
+}
+
+static void record_exchange_result(esp_err_t result)
+{
+    if (result == ESP_OK) {
+        atomic_fetch_add(&s_exchanges_ok, 1);
+    } else {
+        atomic_fetch_add(&s_exchanges_failed, 1);
+        if (result == ESP_ERR_TIMEOUT) {
+            atomic_fetch_add(&s_exchanges_timed_out, 1);
+        }
+    }
+}
+
 esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
                             const void *payload, size_t payload_length,
                             void *response, size_t response_capacity,
@@ -576,6 +627,7 @@ esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
         return ESP_ERR_INVALID_ARG;
     }
     if (xSemaphoreTake(s_pending_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+        record_exchange_result(ESP_ERR_TIMEOUT);
         return ESP_ERR_TIMEOUT;
     }
 
@@ -588,6 +640,7 @@ esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
     }
     if (pending == NULL) {
         xSemaphoreGive(s_pending_mutex);
+        record_exchange_result(ESP_ERR_NO_MEM);
         return ESP_ERR_NO_MEM;
     }
 
@@ -613,6 +666,7 @@ esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
     }
 
     if (xSemaphoreTake(s_pending_mutex, portMAX_DELAY) != pdTRUE) {
+        record_exchange_result(ESP_ERR_TIMEOUT);
         return ESP_ERR_TIMEOUT;
     }
     if (result == ESP_OK) {
@@ -627,6 +681,7 @@ esp_err_t luna_usb_exchange(uint8_t request_type, uint8_t response_type,
     pending->response = NULL;
     pending->response_capacity = 0;
     xSemaphoreGive(s_pending_mutex);
+    record_exchange_result(result);
     return result;
 }
 
