@@ -34,6 +34,8 @@ R5 另增加 `DEVICE_DIAGNOSTICS`（类型 14）单向设备快照，供 Agent �
 - `COVER_INFO_REQUEST / COVER_INFO`：以状态快照中的 16 字符 `cover_id` 查询 JPEG 总长度和 SHA-256；
 - `COVER_CHUNK_REQUEST / COVER_CHUNK`：按偏移读取最多 2048 字节；每块核对长度和偏移，完整图片再核对 SHA-256；
 - 动作继续经过 Windows Agent 的白名单和 `request_id` 去重；
+- R5 改为保存真实动作结果，重复失败不伪装成功，编号冲突或未完成请求不重复执行；
+  详见 [动作防重放与真实结果](r5-action-results.md)；
 - 单帧载荷上限为 4096 字节，帧仍包含版本、请求 ID、长度和 CRC32；
 - USB 传输超时或断线时保留现有 HTTP 请求；图片缺失、长度错误或校验失败时丢弃临时图片，等待下一次状态轮询。
 

@@ -14,6 +14,7 @@ from typing import Any, Protocol
 import serial
 
 from luna_device_diagnostics import parse_device_diagnostics
+from luna_actions import parse_action_request
 from luna_link_protocol import Frame, FrameDecoder, MAX_PAYLOAD, MessageType, encode_frame
 from luna_usb_probe import open_luna, read_frames
 
@@ -206,12 +207,8 @@ class LunaUsbTransport:
 
         if frame.message_type == MessageType.ACTION_REQUEST:
             try:
-                request = json.loads(frame.payload.decode("utf-8"))
-                request_id = str(request["request_id"])
-                action = str(request["action"])
-                if not request_id or len(request_id) > 80:
-                    raise ValueError("invalid request id")
-                result = self.agent.execute(request_id, action, request.get("value"))
+                request_id, action, value = parse_action_request(frame.payload)
+                result = self.agent.execute(request_id, action, value)
             except (KeyError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
                 result = {"ok": False, "error": str(error)}
             self._send_json(port, MessageType.ACTION_RESULT, frame.request_id, result)

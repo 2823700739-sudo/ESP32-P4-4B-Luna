@@ -108,6 +108,11 @@ Luna Link 握手；`connections` 和 `disconnects` 是本次 Agent 进程的连�
 `last_frame_age_seconds` 可用于观察最近通信距今多久。
 `state_requests` 等计数只在成功发送对应回复后增加。Agent 重启会清零这些计数。
 
+`actions` 记录实际执行、失败、结果未确认、重复和编号冲突，以及动作处理耗时。
+USB 与 HTTP 共用最近 128 条动作结果；重复请求不再把失败误报为成功。
+超时或异常时不追加可能重复的媒体键，详见
+[动作防重放与真实结果](../docs/development/r5-action-results.md)。
+
 新固件还通过 USB 发布设备自身诊断快照：`usb.device` 包含启动 ID、运行秒数、
 重启原因、固件 ELF 哈希、内部 RAM/PSRAM 和固件 USB 计数。
 `usb.device_stale` 标明是否为断线、旧会话或超过 120 秒未更新的缓存。

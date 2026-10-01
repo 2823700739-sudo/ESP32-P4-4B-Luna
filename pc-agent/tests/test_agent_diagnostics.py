@@ -17,6 +17,9 @@ class FakeAgent:
     config = {"token": "test-token-with-at-least-20-chars"}
     started_at = "2026-10-01T12:00:00Z"
 
+    def action_diagnostics(self) -> dict:
+        return {"executed": 3, "duplicates": 1, "failed": 1}
+
 
 class FakeTransport:
     def diagnostics(self) -> dict:
@@ -48,6 +51,8 @@ class AgentDiagnosticsTests(unittest.TestCase):
             self.assertEqual(body["agent_started_at"], FakeAgent.started_at)
             self.assertEqual(body["usb"]["connections"], 2)
             self.assertEqual(body["usb"]["state_requests"], 12)
+            self.assertEqual(body["actions"]["executed"], 3)
+            self.assertEqual(body["actions"]["failed"], 1)
         finally:
             server.shutdown()
             server.server_close()

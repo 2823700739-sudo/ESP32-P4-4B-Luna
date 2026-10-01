@@ -32,6 +32,8 @@ The diagnostics screen also tracks USB opens, handshakes, exchanges, and errors
 for reconnection testing.
 Runtime diagnostics are also sent over USB to the Agent for device reboot and
 memory records; see [USB 设备运行状态同步](docs/development/r5-device-diagnostics.md).
+USB and HTTP now share bounded action results, including failure and uncertain
+outcomes; see [动作防重放与真实结果](docs/development/r5-action-results.md).
 Codex and music cards now mark last-known PC data when the PC link is offline;
 music and volume controls remain disabled until the link recovers.
 The Windows Agent now supports per-user login auto-start, so USB OTG plug-in

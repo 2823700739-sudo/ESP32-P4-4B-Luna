@@ -14,7 +14,6 @@ import socket
 import sys
 import threading
 import time
-from collections import deque
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -23,6 +22,7 @@ from typing import Any
 
 from agent_instance import single_agent_instance
 from codex_adapter import CodexAdapter
+from luna_actions import ActionHistory, parse_action_request
 from luna_usb_transport import LunaUsbTransport
 from weather_adapter import WeatherAdapter
 from windows_media import WindowsMediaAdapter
@@ -85,7 +85,7 @@ class AgentState:
         self.started_at = utc_now()
         self._sequence = 0
         self._lock = threading.Lock()
-        self._request_ids: deque[str] = deque(maxlen=128)
+        self._actions = ActionHistory()
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -114,35 +114,17 @@ class AgentState:
         }
 
     def execute(self, request_id: str, action: str, value: Any = None) -> dict[str, Any]:
-        if action == "music.volume_set" and (
-            isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100
-        ):
-            return {"ok": False, "error": "invalid_volume", "action": action}
-        with self._lock:
-            if request_id in self._request_ids:
-                return {"ok": True, "duplicate": True, "action": action}
-            self._request_ids.append(request_id)
+        return self._actions.execute(
+            request_id, action, value, lambda: self._execute_action(action, value)
+        )
 
-        supported_actions = {
-            "music.previous",
-            "music.play",
-            "music.pause",
-            "music.play_pause",
-            "music.next",
-            "music.volume_down",
-            "music.volume_up",
-            "music.volume_set",
-            "music.mute",
-        }
-        if action not in supported_actions:
-            return {"ok": False, "error": "unsupported_action", "action": action}
+    def action_diagnostics(self) -> dict[str, Any]:
+        return self._actions.diagnostics()
 
+    def _execute_action(self, action: str, value: Any) -> dict[str, Any]:
         if action in {"music.volume_set", "music.mute"}:
-            try:
-                volume = (self.volume.set_percent(value) if action == "music.volume_set"
-                          else self.volume.toggle_mute())
-            except (OSError, RuntimeError) as error:
-                return {"ok": False, "error": "volume_unavailable", "detail": str(error)}
+            volume = (self.volume.set_percent(value) if action == "music.volume_set"
+                      else self.volume.toggle_mute())
             return {"ok": True, "duplicate": False, "action": action, "volume": volume}
 
         accepted = False
@@ -153,10 +135,7 @@ class AgentState:
             "music.play_pause",
             "music.next",
         }:
-            try:
-                accepted = self.media.execute(action)
-            except Exception as error:
-                print(f"Windows media session action failed, using media key: {error}")
+            accepted = self.media.execute(action)
         if not accepted and action in {"music.play", "music.pause"}:
             return {"ok": False, "error": "media_session_unavailable", "action": action}
         key = MEDIA_KEYS.get(action)
@@ -222,6 +201,7 @@ class LunaRequestHandler(BaseHTTPRequestHandler):
                 "ok": True,
                 "agent_started_at": self.agent.started_at,
                 "usb": self.usb_transport.diagnostics(),
+                "actions": self.agent.action_diagnostics(),
             })
             return
         if self.path == "/api/v1/music/cover":
@@ -254,12 +234,7 @@ class LunaRequestHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > MAX_BODY_BYTES:
                 raise ValueError("invalid body length")
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-            request_id = str(body["request_id"])
-            action = str(body["action"])
-            value = body.get("value")
-            if not request_id or len(request_id) > 80:
-                raise ValueError("invalid request id")
+            request_id, action, value = parse_action_request(self.rfile.read(length))
             result = self.agent.execute(request_id, action, value)
             status = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST
             self._send_json(status, result)

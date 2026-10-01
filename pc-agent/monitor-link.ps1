@@ -43,6 +43,8 @@ $previousDeviceBoot = $null
 $previousDeviceBootChanges = $null
 $previousDeviceRejected = $null
 $previousDeviceCounters = @{}
+$previousActionFailures = $null
+$previousActionUnknown = $null
 Write-Host "Recording Luna USB link to $outputFile"
 do {
     $sample = [ordered]@{
@@ -84,6 +86,18 @@ do {
         device_usb_protocol_errors = ''
         device_usb_queue_drops = ''
         device_usb_tx_errors = ''
+        actions_executed = ''
+        actions_succeeded = ''
+        actions_failed = ''
+        actions_unknown = ''
+        actions_duplicates = ''
+        actions_in_progress = ''
+        actions_conflicts = ''
+        actions_rejected = ''
+        actions_busy = ''
+        actions_pending = ''
+        actions_last_execution_ms = ''
+        actions_max_execution_ms = ''
         error = ''
     }
     try {
@@ -116,6 +130,26 @@ do {
             }
         }
         $observations = @()
+        if ($result.actions) {
+            foreach ($key in @('executed', 'succeeded', 'failed', 'unknown', 'duplicates',
+                               'in_progress', 'conflicts', 'rejected', 'busy', 'pending',
+                               'last_execution_ms', 'max_execution_ms')) {
+                $sample["actions_$key"] = $result.actions.$key
+            }
+            # Baseline old counts. Agent restart is reported separately below.
+            if ($previousAgentStart -eq $sample.agent_started_at) {
+                if ($null -ne $previousActionFailures -and
+                    [long]$result.actions.failed -gt $previousActionFailures) {
+                    $observations += 'Action failure count increased'
+                }
+                if ($null -ne $previousActionUnknown -and
+                    [long]$result.actions.unknown -gt $previousActionUnknown) {
+                    $observations += 'Action unknown count increased'
+                }
+            }
+            $previousActionFailures = [long]$result.actions.failed
+            $previousActionUnknown = [long]$result.actions.unknown
+        }
         if ($usb.device) {
             foreach ($key in @('boot_id', 'firmware_elf_sha256', 'uptime_seconds', 'wifi_online',
                                'internal_free_bytes', 'internal_min_free_bytes',
