@@ -94,8 +94,25 @@ USB 中断时，迁移期固件可在已取得 Wi-Fi IP 后回退以下 HTTP 接
 
 - `GET /health`：不需要鉴权的进程健康检查；
 - `GET /api/v1/state`：读取电脑、音乐和其他卡片状态；
+- `GET /api/v1/diagnostics`：读取 Agent 侧 USB 连接与请求计数；
 - `GET /api/v1/music/cover`：读取当前歌曲的 JPEG 封面；
 - `POST /api/v1/actions`：发送白名单内的控制命令。
+
+除 `/health` 外均需 `X-Luna-Token`。诊断接口里的 `connected` 表示当前已完成
+Luna Link 握手；`connections` 和 `disconnects` 是本次 Agent 进程的连接会话数，
+不是物理拔插次数。`errors_total` 包括找不到设备时的重试失败，
+`state_requests` 等计数只在成功发送对应回复后增加。Agent 重启会清零这些计数。
+
+无需占用 COM 端口即可记录长时间链路状态：
+
+```powershell
+.\pc-agent\monitor-link.ps1 -DurationSeconds 28800 -IntervalSeconds 10
+```
+
+脚本只查询本机 Agent，将采样写入被 Git 忽略的 `pc-agent/usb-soak-*.csv`；
+如有断线、错误计数增加或查询失败，会在结束时报告失败。它记录 Agent
+观察到的断线；采样间隔内完全未被 Agent 观察到的异常仍需结合设备
+Diagnostics 页和实际操作判断。
 
 音乐命令包括 `music.previous`、`music.play`、`music.pause`、
 `music.play_pause`、`music.next`、`music.volume_down`、`music.volume_up`、

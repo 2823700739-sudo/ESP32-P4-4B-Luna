@@ -6,6 +6,7 @@ from pathlib import Path
 import struct
 import sys
 import unittest
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -38,6 +39,8 @@ class FakeMedia:
 
 class FakePort:
     def __init__(self) -> None:
+        self.port = "COM-TEST"
+        self.closed = False
         self.writes: list[bytes] = []
 
     def write(self, data: bytes) -> int:
@@ -46,6 +49,9 @@ class FakePort:
 
     def flush(self) -> None:
         pass
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def decode_write(port: FakePort) -> Frame:
@@ -67,6 +73,8 @@ class LunaUsbTransportTests(unittest.TestCase):
         self.assertEqual(response.message_type, MessageType.STATE_SNAPSHOT)
         self.assertEqual(response.request_id, 17)
         self.assertEqual(json.loads(response.payload)["sequence"], 3)
+        self.assertEqual(transport.diagnostics()["state_requests"], 1)
+        self.assertIsNotNone(transport.diagnostics()["last_snapshot_at"])
 
     def test_action_request_executes_allowlisted_agent_path(self) -> None:
         agent = FakeAgent()
@@ -83,6 +91,7 @@ class LunaUsbTransportTests(unittest.TestCase):
         self.assertEqual(response.request_id, 23)
         self.assertTrue(json.loads(response.payload)["ok"])
         self.assertEqual(agent.actions, [("p4-99", "music.volume_set", 42)])
+        self.assertEqual(transport.diagnostics()["action_requests"], 1)
 
     def test_invalid_action_json_returns_error(self) -> None:
         port = FakePort()
@@ -115,6 +124,8 @@ class LunaUsbTransportTests(unittest.TestCase):
             self.assertEqual(struct.unpack_from("<I", chunk.payload)[0], offset)
             received.extend(chunk.payload[4:])
         self.assertEqual(bytes(received), agent.media.data)
+        self.assertEqual(transport.diagnostics()["cover_info_requests"], 1)
+        self.assertEqual(transport.diagnostics()["cover_chunk_requests"], 2)
 
     def test_stale_cover_id_never_returns_new_cover(self) -> None:
         port = FakePort()
@@ -127,6 +138,51 @@ class LunaUsbTransportTests(unittest.TestCase):
         request = stale_id + struct.pack("<IH", 0, 2048)
         transport._handle_frame(port, Frame(MessageType.COVER_CHUNK_REQUEST, 2, request))
         self.assertEqual(decode_write(port).payload, b"")
+
+    def test_unexpected_failure_is_counted_and_retried(self) -> None:
+        transport = LunaUsbTransport(FakeAgent(), retry_seconds=0.01)
+        calls = 0
+
+        def fail_then_stop() -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                transport._stop.set()
+            raise RuntimeError("temporary snapshot failure")
+
+        with patch("luna_usb_transport.open_luna", side_effect=fail_then_stop):
+            transport._run()
+
+        self.assertEqual(calls, 2)
+        stats = transport.diagnostics()
+        self.assertFalse(stats["connected"])
+        self.assertEqual(stats["errors_total"], 1)
+        self.assertIn("RuntimeError", stats["last_error"])
+
+    def test_connected_session_is_closed_after_serve_failure(self) -> None:
+        transport = LunaUsbTransport(FakeAgent(), retry_seconds=0.01)
+        port = FakePort()
+
+        def fail_serve(_port: FakePort, _decoder: FrameDecoder) -> None:
+            self.assertTrue(transport.diagnostics()["connected"])
+            raise RuntimeError("snapshot failed")
+
+        def stop_after_retry(_seconds: float) -> None:
+            transport._stop.set()
+
+        with patch("luna_usb_transport.open_luna", return_value=(port, FrameDecoder(),
+                                                                 {"firmware": "test"})), \
+             patch.object(transport, "_serve", side_effect=fail_serve), \
+             patch.object(transport._stop, "wait", side_effect=stop_after_retry):
+            transport._run()
+
+        stats = transport.diagnostics()
+        self.assertFalse(stats["connected"])
+        self.assertEqual(stats["port"], "COM-TEST")
+        self.assertEqual(stats["connections"], 1)
+        self.assertEqual(stats["disconnects"], 1)
+        self.assertEqual(stats["errors_total"], 1)
+        self.assertTrue(port.closed)
 
 
 if __name__ == "__main__":

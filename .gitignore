@@ -15,6 +15,7 @@
 pc-agent/weather-cache.json
 pc-agent/weather-cache.json.tmp
 pc-agent/agent.log*
+pc-agent/usb-soak-*.csv
 **/.env
 **/.env.*
 !**/.env.example

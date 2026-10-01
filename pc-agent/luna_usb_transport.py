@@ -7,6 +7,7 @@ import hashlib
 import struct
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 import serial
@@ -36,9 +37,52 @@ class LunaUsbTransport:
         self.retry_seconds = retry_seconds
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._stats_lock = threading.Lock()
+        self._connected = False
+        self._port: str | None = None
+        self._firmware: str | None = None
+        self._connected_since: float | None = None
+        self._connections = 0
+        self._disconnects = 0
+        self._errors_total = 0
+        self._consecutive_errors = 0
+        self._last_connected_at: str | None = None
+        self._last_disconnected_at: str | None = None
+        self._last_error: str | None = None
+        self._last_error_at: str | None = None
+        self._last_snapshot_at: str | None = None
         self._state_requests = 0
         self._action_requests = 0
+        self._cover_info_requests = 0
         self._cover_requests = 0
+
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def diagnostics(self) -> dict[str, Any]:
+        with self._stats_lock:
+            duration = (round(time.monotonic() - self._connected_since, 1)
+                        if self._connected_since is not None else None)
+            return {
+                "connected": self._connected,
+                "port": self._port,
+                "firmware": self._firmware,
+                "connected_seconds": duration,
+                "connections": self._connections,
+                "disconnects": self._disconnects,
+                "errors_total": self._errors_total,
+                "consecutive_errors": self._consecutive_errors,
+                "last_connected_at": self._last_connected_at,
+                "last_disconnected_at": self._last_disconnected_at,
+                "last_error": self._last_error,
+                "last_error_at": self._last_error_at,
+                "last_snapshot_at": self._last_snapshot_at,
+                "state_requests": self._state_requests,
+                "action_requests": self._action_requests,
+                "cover_info_requests": self._cover_info_requests,
+                "cover_chunk_requests": self._cover_requests,
+            }
 
     def start(self) -> None:
         if self._thread is not None:
@@ -66,11 +110,14 @@ class LunaUsbTransport:
             self._send_json(
                 port, MessageType.STATE_SNAPSHOT, frame.request_id, snapshot
             )
-            self._state_requests += 1
-            if self._state_requests == 1 or self._state_requests % 20 == 0:
+            with self._stats_lock:
+                self._state_requests += 1
+                self._last_snapshot_at = self._utc_now()
+                count = self._state_requests
+            if count == 1 or count % 20 == 0:
                 print(
                     f"Luna USB state snapshot served: sequence={snapshot.get('sequence')} "
-                    f"count={self._state_requests}"
+                    f"count={count}"
                 )
             return
 
@@ -83,6 +130,8 @@ class LunaUsbTransport:
             else:
                 payload = struct.pack("<I", len(data)) + hashlib.sha256(data).digest()
             self._send_bytes(port, MessageType.COVER_INFO, frame.request_id, payload)
+            with self._stats_lock:
+                self._cover_info_requests += 1
             return
 
         if frame.message_type == MessageType.COVER_CHUNK_REQUEST:
@@ -95,9 +144,11 @@ class LunaUsbTransport:
                         0 < chunk_size <= 2048 and offset < len(data)):
                     payload = struct.pack("<I", offset) + data[offset:offset + chunk_size]
             self._send_bytes(port, MessageType.COVER_CHUNK, frame.request_id, payload)
-            self._cover_requests += 1
-            if self._cover_requests == 1 or self._cover_requests % 100 == 0:
-                print(f"Luna USB cover chunks served: count={self._cover_requests}")
+            with self._stats_lock:
+                self._cover_requests += 1
+                count = self._cover_requests
+            if count == 1 or count % 100 == 0:
+                print(f"Luna USB cover chunks served: count={count}")
             return
 
         if frame.message_type == MessageType.ACTION_REQUEST:
@@ -111,10 +162,12 @@ class LunaUsbTransport:
             except (KeyError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
                 result = {"ok": False, "error": str(error)}
             self._send_json(port, MessageType.ACTION_RESULT, frame.request_id, result)
-            self._action_requests += 1
+            with self._stats_lock:
+                self._action_requests += 1
+                count = self._action_requests
             print(
                 f"Luna USB action result: action={result.get('action', 'invalid')} "
-                f"ok={result.get('ok', False)} count={self._action_requests}"
+                f"ok={result.get('ok', False)} count={count}"
             )
             return
 
@@ -143,21 +196,40 @@ class LunaUsbTransport:
             try:
                 port, decoder, identity = open_luna()
                 last_error = ""
+                with self._stats_lock:
+                    self._connected = True
+                    self._port = str(port.port)
+                    self._firmware = str(identity.get("firmware", "unknown"))
+                    self._connected_since = time.monotonic()
+                    self._connections += 1
+                    self._consecutive_errors = 0
+                    self._last_connected_at = self._utc_now()
                 print(
                     f"Luna USB agent connected on {port.port}: "
                     f"firmware={identity.get('firmware', 'unknown')}"
                 )
                 self._serve(port, decoder)
-            except (ConnectionError, OSError, serial.SerialException, ValueError) as error:
+            except Exception as error:
                 if not self._stop.is_set():
-                    message = str(error)
+                    message = f"{type(error).__name__}: {error}"
                     now = time.monotonic()
+                    with self._stats_lock:
+                        self._errors_total += 1
+                        self._consecutive_errors += 1
+                        self._last_error = message[:240]
+                        self._last_error_at = self._utc_now()
                     if message != last_error or now >= next_error_log:
                         print(f"Luna USB agent waiting: {message}")
                         last_error = message
                         next_error_log = now + 10.0
             finally:
                 if port is not None:
+                    with self._stats_lock:
+                        if self._connected:
+                            self._connected = False
+                            self._connected_since = None
+                            self._disconnects += 1
+                            self._last_disconnected_at = self._utc_now()
                     try:
                         port.close()
                     except (OSError, serial.SerialException):

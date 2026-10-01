@@ -180,6 +180,10 @@ class LunaRequestHandler(BaseHTTPRequestHandler):
     def agent(self) -> AgentState:
         return self.server.agent  # type: ignore[attr-defined]
 
+    @property
+    def usb_transport(self) -> LunaUsbTransport:
+        return self.server.usb_transport  # type: ignore[attr-defined]
+
     def log_message(self, message: str, *args: object) -> None:
         sys.stdout.write("[%s] %s\n" % (self.log_date_time_string(), message % args))
         sys.stdout.flush()
@@ -209,6 +213,12 @@ class LunaRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/health":
             self._send_json(HTTPStatus.OK, {"ok": True, "protocol_version": PROTOCOL_VERSION})
+            return
+        if self.path == "/api/v1/diagnostics":
+            if not self._authorized():
+                self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "error": "unauthorized"})
+                return
+            self._send_json(HTTPStatus.OK, {"ok": True, "usb": self.usb_transport.diagnostics()})
             return
         if self.path == "/api/v1/music/cover":
             if not self._authorized():
@@ -256,8 +266,10 @@ class LunaRequestHandler(BaseHTTPRequestHandler):
 class LunaServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], agent: AgentState) -> None:
+    def __init__(self, address: tuple[str, int], agent: AgentState,
+                 usb_transport: LunaUsbTransport) -> None:
         self.agent = agent
+        self.usb_transport = usb_transport
         super().__init__(address, LunaRequestHandler)
 
 
@@ -281,8 +293,8 @@ def run_agent() -> int:
     print(f"Codex executable: {codex.executable}")
     initial_codex = codex.snapshot()
     agent = AgentState(config, media, codex, weather, volume)
-    server = LunaServer((host, port), agent)
     usb_transport = LunaUsbTransport(agent)
+    server = LunaServer((host, port), agent, usb_transport)
     if bool(config.get("usb_enabled", True)):
         usb_transport.start()
     print(f"Luna agent listening on http://{host}:{port}")
