@@ -10,7 +10,7 @@
 
 用户最新明确要求：检查 GitHub 发布前重要缺口，**先不继续优化**，写项目说明与开发技术文档，删除无用文档。本轮已完成文档整理与范围审计，停止功能开发。自动化 luna 实际配置已核对为 PAUSED，不因仍有缺口自动恢复。
 
-仓库：<https://github.com/2823700739-sudo/ESP32-P4-4B-Luna>。此前“修复部署、实测后提交”的本地提交授权仍有效，不自动推送。每轮先读本文件、[状态](docs/development/current-status.md)、[质量路线](docs/development/quality-roadmap.md)、[经验](docs/development/project-experience.md)，新指令优先，冲突先查证。
+仓库：<https://github.com/2823700739-sudo/ESP32-P4-4B-Luna>。此前“修复部署、实测后提交”的本地提交授权仍有效；用户于 2026-10-04 明确要求“把这个项目推送到github上”，本轮获准推送当前已有分支 codex/usb-r2。未授权合并 main、建立 Release 或恢复优化；后续仍不自动推送。每轮先读本文件、[状态](docs/development/current-status.md)、[质量路线](docs/development/quality-roadmap.md)、[经验](docs/development/project-experience.md)，新指令优先，冲突先查证。
 
 ## 已完成与文件入口
 
@@ -32,7 +32,7 @@
 
 ## 重要缺口、卡在哪里与下一步
 
-文档整理无技术阻塞，产品发布门槛尚未全部完成。**下一步等待用户发布或补缺口的新指令，不能自动继续优化。** 可提交开发预览源码，不能宣称已完成完整发布验收。
+文档整理无技术阻塞，产品发布门槛尚未全部完成。**已按用户明确指令推送 GitHub，完成后等待新指令，不能自动继续优化。** 可提交开发预览源码，不能宣称已完成完整发布验收。
 
 1. 首次天气地点配置缺失：`luna_weather_set_location()` 仅定义/声明、没有调用入口。设备已有 NVS 地点可运行，空白设备会等待地点；不清空 NVS 做验证，不复活旧天气 HTTP 工具。
 2. Wi-Fi 凭据为本地构建配置，没有运行时配网；时区固定北京时间。不要发布含个人凭据的镜像。
@@ -73,3 +73,10 @@ Get-Content pc-agent/ble-link.log -Tail 12
 本轮完整文档备份在仓库外 `..\Luna-release-docs-backup-20261003-160531.zip`，SHA-256 `BF823D643524507087D2B1318E578FA8345E2F81858B4510858AC34BC2FC4DC6`；删除前核验四份原件均在 ZIP 内。更早 `..\Luna-legacy-backup-20261002-1845.zip` / `..\Luna-docs-before-cleanup-20261003.zip` 继续保留。仅供本机恢复，不作为公开构建依赖或发布附件。
 
 本轮[复盘](docs/development/collaboration-retrospective.md)将“暂停优化、转向发布文档”记作后来明确的需求变更，无用户指出的技术判断错误；[经验](docs/development/project-experience.md)新增 EXP-008 首次启动/NVS 隐式前提审计。后续阶段仍按质量路线同步三份记录与状态。不自动另开聊天、迁移模式或推送。
+
+
+## 2026-10-04 GitHub 推送收尾
+
+工作区开始时干净，当前分支 codex/usb-r2；fetch 后远端无新增、本地领先 3 提交（36e1354、8d14338、d584389）。对这三个提交的 416 个文本快照进行私钥/token/非空 Wi-Fi 配置模式检查，零候选；只推送 Git 跟踪内容，不包括忽略配置、日志、构建或仓库外备份。非强制推送成功，git ls-remote 核对远端 refs/heads/codex/usb-r2 为 d5843898c53e527012e58580ac6d872528ffa17f，与本地项目提交完全一致；本次收尾记录另行提交并推送同分支，最新完整 SHA 以远端核对为准。无需重新构建、重启常驻或操作设备。
+
+本轮无用户纠正，新增明确推送授权属于范围扩展；复盘已记录。项目经验无新增，沿用 EXP-003 的公开配置边界与 EXP-004 的证据分层，不为推送制造技术条目。功能与硬件验收缺口保持原状；优化/自动化继续暂停。
