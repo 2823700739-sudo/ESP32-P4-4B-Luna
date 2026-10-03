@@ -85,6 +85,71 @@ class WindowsDashboardTests(unittest.TestCase):
         self.assertEqual(counters.collect(), {})
         counters.close()
 
+    def test_all_formatted_arrays_failing_triggers_gpu_recovery(self):
+        for stage in ('size', 'read'):
+            with self.subTest(stage=stage):
+                dll = self.pdh()
+
+                def unavailable(_counter, _format, size, count, buffer):
+                    if stage == 'size' or buffer is not None:
+                        return 1
+                    size._obj.value = C.sizeof(CounterItem)
+                    return 0x800007D2  # PDH_MORE_DATA: normal size discovery.
+
+                dll.PdhGetFormattedCounterArrayW.side_effect = unavailable
+                with patch('windows_dashboard.C.WinDLL', return_value=dll, create=True):
+                    counters = GpuCounters()
+                collector = self.collector()
+                collector.counters = counters
+                with patch('windows_dashboard.time.monotonic', return_value=100):
+                    with self.assertLogs('luna.ble.link', level='WARNING'):
+                        sample = collector.sample()
+                self.assertEqual((sample['cpu'], sample['ram_used_gb'], sample['project']),
+                                 (90, 12, 'Luna'))
+                self.assertIsNone(sample['gpu'])
+                self.assertIsNone(collector.counters)
+                self.assertIsNone(collector.gpu)
+                self.assertEqual(collector._gpu_retry_at, 130)
+                dll.PdhCloseQuery.assert_called_once()
+
+    def test_one_failed_array_preserves_the_other_gpu_metric(self):
+        dll = self.pdh()
+
+        def partial(counter, _format, size, count, buffer):
+            if counter.value == 1:
+                return 1
+            size._obj.value = C.sizeof(CounterItem)
+            count._obj.value = 1
+            if buffer is None:
+                return 0x800007D2
+            item = C.cast(buffer, C.POINTER(CounterItem))[0]
+            item.name = 'luid_x'
+            item.value.status = 0
+            item.value.number = 2 * 1024**3
+            return 0
+
+        dll.PdhGetFormattedCounterArrayW.side_effect = partial
+        with patch('windows_dashboard.C.WinDLL', return_value=dll, create=True):
+            counters = GpuCounters()
+        counters.counters = {'engines': C.c_void_p(1), 'memory': C.c_void_p(2)}
+        collector = self.collector()
+        collector.counters = counters
+        sample = collector.sample()
+        self.assertIsNone(sample['gpu'])
+        self.assertEqual(sample['vram_used_gb'], 2)
+        self.assertIs(collector.counters, counters)
+        dll.PdhCloseQuery.assert_not_called()
+        collector.close()
+
+    def test_successful_empty_arrays_do_not_trigger_query_rebuild(self):
+        dll = self.pdh()
+        dll.PdhGetFormattedCounterArrayW.return_value = 0
+        with patch('windows_dashboard.C.WinDLL', return_value=dll, create=True):
+            counters = GpuCounters()
+        self.assertEqual(counters.collect(), {'engines': [], 'memory': []})
+        dll.PdhCloseQuery.assert_not_called()
+        counters.close()
+
     def test_null_gpu_instance_name_does_not_discard_cpu_ram_or_project(self):
         collector = self.collector()
         collector.counters.collect.return_value = {

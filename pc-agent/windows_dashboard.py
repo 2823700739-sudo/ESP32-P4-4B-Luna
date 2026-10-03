@@ -17,6 +17,7 @@ import time
 import uuid
 
 LOG = logging.getLogger("luna.ble.link")
+PDH_MORE_DATA = 0x800007D2
 
 
 def finite(value, low=0, high=100):
@@ -115,6 +116,7 @@ class GpuCounters:
         self.dll.PdhCollectQueryData.argtypes = [C.c_void_p]
         self.dll.PdhCloseQuery.argtypes = [C.c_void_p]
         self.dll.PdhGetFormattedCounterArrayW.argtypes = [C.c_void_p, W.DWORD, C.POINTER(W.DWORD), C.POINTER(W.DWORD), C.c_void_p]
+        self.dll.PdhGetFormattedCounterArrayW.restype = W.DWORD
         if self.dll.PdhOpenQueryW(None, 0, C.byref(self.query)):
             raise OSError("PDH query unavailable")
         try:
@@ -134,13 +136,21 @@ class GpuCounters:
         if self.dll.PdhCollectQueryData(self.query):
             raise OSError("PDH collection unavailable")
         result = {}
+        array_failed = False
         for key, counter in self.counters.items():
             size, count = W.DWORD(), W.DWORD()
-            self.dll.PdhGetFormattedCounterArrayW(counter, 0x200, C.byref(size), C.byref(count), None)
+            status = self.dll.PdhGetFormattedCounterArrayW(counter, 0x200, C.byref(size), C.byref(count), None)
+            if status not in (0, PDH_MORE_DATA):
+                array_failed = True
+                continue
+            if status == 0 and size.value == 0 and count.value == 0:
+                result[key] = []
+                continue
             if not 0 < size.value <= 4 * 1024 * 1024:
                 continue
             buffer = C.create_string_buffer(size.value)
             if self.dll.PdhGetFormattedCounterArrayW(counter, 0x200, C.byref(size), C.byref(count), buffer):
+                array_failed = True
                 continue
             if count.value > len(buffer) // C.sizeof(CounterItem):
                 continue
@@ -148,6 +158,10 @@ class GpuCounters:
             result[key] = [(items[i].name, items[i].value.number) for i in range(count.value)
                            if items[i].name and items[i].value.status in (0, 1)
                            and math.isfinite(items[i].value.number)]
+        if array_failed and not result:
+            # Collection can succeed while every formatted counter is broken.
+            # Reuse the caller's bounded GPU recovery instead of retrying forever.
+            raise OSError("PDH formatted arrays unavailable")
         return result
 
     def close(self):

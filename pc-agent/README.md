@@ -52,6 +52,7 @@ Weather is obtained by the device over Wi-Fi, not by this PC process. `--music` 
 Windows metrics are sampled every 2 seconds with GetSystemTimes, GlobalMemoryStatusEx, DXGI and language-neutral PDH. GPU uses the busiest engine on the largest dedicated-memory hardware adapter; VRAM is adapter-wide dedicated usage, not per-process totals. CPU/GPU temperatures stay unavailable without a supported sensor provider. No driver installation or administrator access is required. Only a recognized default foreground `Code.exe` workspace title provides the last active project name; customized/unidentified titles remain unavailable. Full paths and source files are not sent. Open the intended VS Code project and bring it to the foreground once to populate this field.
 
 Metric initialization retries with interruptible 2–30 second backoff. A failed GPU query is closed and reinitialized after a 30-second cooldown, including adapter re-enumeration; CPU/RAM/project sampling continues independently. Unsupported GPU providers remain unavailable, not zero. Failed PDH initialization releases its query, and repeated service starts do not create duplicate sampling threads.
+If collection succeeds but every formatted GPU array read fails, the same cooldown/rebuild path applies. A readable array (including an empty one) is preserved when another array fails, so partial GPU data does not cause unnecessary query rebuilding.
 If the whole PC metric sample fails three times in a row, the collector is closed and recreated with interruptible 2–30 second backoff. A single transient failure keeps the existing collector; the failed sample stays unavailable rather than appearing as zero. This recovery path has a simulated regression, but has not been exercised against a real Windows driver or sleep/wake failure, and the running resident may still have older code until intentionally restarted.
 
 BLE negotiates the `dashboard` feature, sends cached read-only snapshots at most every 2 seconds, and prioritizes music actions. Existing music-only firmware is compatible and doesn't receive unsupported dashboard messages. Firmware validates the entire snapshot atomically; disconnected/expired readings are visibly marked. This collector never opens COM ports or an HTTP listener.
@@ -78,7 +79,11 @@ compiler. It includes mocked BLE and media tests; it does not connect to Luna
 or command real playback. To run the complete local suite, install native GCC
 and populate ESP-IDF managed components, then run the same script without
 `--hosted`. Native tests compile firmware C code and must not be counted as
-passed when these prerequisites are absent. The GitHub Actions workflow uses
+passed when these prerequisites are absent. Both lanes return a failing exit
+code if any selected test is skipped, and print its reason. The hosted lane's
+explicit native-test exclusions happen before execution and are not skips;
+install the missing prerequisites before retrying a failed full lane.
+The GitHub Actions workflow uses
 Windows Server 2025 for its hosted lane and runs the dependency-free preview
 model tests separately. The hosted lane mocks BLE and media calls; Windows
 Server CI cannot validate Bleak's supported Windows 11 desktop runtime,

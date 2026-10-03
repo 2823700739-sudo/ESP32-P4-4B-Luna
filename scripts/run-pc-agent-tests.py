@@ -45,8 +45,9 @@ def main():
         parser.error("no tests selected")
     print(f"Luna {'hosted' if args.hosted else 'full'} lane: {len(selected)} tests", flush=True)
     result = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(selected))
-    if args.hosted and result.skipped:
-        print("Hosted lane unexpectedly skipped tests:", result.skipped, file=sys.stderr)
+    if result.skipped:
+        lane = "Hosted" if args.hosted else "Full"
+        print(f"{lane} lane unexpectedly skipped tests:", result.skipped, file=sys.stderr)
         return 1
     return 0 if result.wasSuccessful() else 1
 
