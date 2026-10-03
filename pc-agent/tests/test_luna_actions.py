@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import sys
 import threading
@@ -8,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from luna_actions import ActionHistory, parse_action_request  # noqa: E402
+from luna_actions import ActionHistory  # noqa: E402
 
 
 class ActionHistoryTests(unittest.TestCase):
@@ -50,18 +49,10 @@ class ActionHistoryTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertTrue(history.execute("one", "music.play", None, operation)["duplicate"])
 
-    def test_malformed_action_objects_are_rejected_without_coercion(self) -> None:
-        bad = [None, [], 42, {"request_id": None, "action": "music.play"},
-               {"request_id": 42, "action": "music.play"},
-               {"request_id": "a", "action": []},
-               {"request_id": "a" * 81, "action": "music.play"},
-               {"request_id": "a", "action": "b" * 65}]
-        for body in bad:
-            with self.subTest(body=body), self.assertRaises(ValueError):
-                parse_action_request(json.dumps(body).encode())
-        self.assertEqual(parse_action_request(
-            b'{"request_id":"a","action":"music.volume_set","value":50}'),
-            ("a", "music.volume_set", 50))
+    def test_retired_actions_are_not_executable(self) -> None:
+        history = ActionHistory()
+        for action in ("music.play_pause", "music.volume_up", "music.volume_down"):
+            self.assertEqual(history.execute(action, action, None, lambda: self.fail("retired command executed"))["error"], "unsupported_action")
 
     def test_validation_and_history_stats_are_copied(self) -> None:
         history = ActionHistory()
@@ -85,8 +76,3 @@ class ActionHistoryTests(unittest.TestCase):
         self.assertEqual(stats["succeeded"], 1)
         self.assertEqual(stats["failed"], 1)
         self.assertEqual(stats["executed"], 2)
-
-    def test_oversized_or_deeply_nested_payload_is_rejected(self) -> None:
-        for payload in (b" " * 4097, b"[" * 1500 + b"0" + b"]" * 1500):
-            with self.subTest(size=len(payload)), self.assertRaises(ValueError):
-                parse_action_request(payload)

@@ -1,0 +1,3 @@
+# Windows hosted Python tests. Native C tests have separate ESP-IDF/GCC prerequisites.
+-r requirements-ble-music.txt
+pyserial==3.5

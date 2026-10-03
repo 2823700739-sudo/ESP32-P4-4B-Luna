@@ -1,16 +1,17 @@
-"""Read Codex quota and recent workspaces through the local App Server."""
+"""Read and cache quota only. Project names belong to the VS Code collector."""
 
 from __future__ import annotations
 
 import copy
 import json
+import math
+import logging
 import os
 import queue
 import shutil
 import subprocess
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -45,43 +46,13 @@ def _resolve_codex_executable(configured: str) -> str:
     return "codex"
 
 
-def _utc_iso(timestamp: Any) -> str:
-    if not isinstance(timestamp, (int, float)):
-        return ""
-    return datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
-
-
 def _remaining_percent(window: Any) -> int:
     if not isinstance(window, dict):
         return -1
     used = window.get("usedPercent")
-    if not isinstance(used, (int, float)):
+    if type(used) not in (int, float) or not math.isfinite(used) or not 0 <= used <= 100:
         return -1
     return max(0, min(100, round(100.0 - float(used))))
-
-
-def _window_name(window: dict[str, Any], fallback: str) -> str:
-    minutes = window.get("windowDurationMins")
-    if isinstance(minutes, (int, float)):
-        minutes = int(minutes)
-        if minutes % 1440 == 0:
-            return f"{minutes // 1440}d"
-        if minutes % 60 == 0:
-            return f"{minutes // 60}h"
-        return f"{minutes}m"
-    return fallback
-
-
-def _reset_line(window: Any, fallback: str) -> str:
-    if not isinstance(window, dict):
-        return ""
-    timestamp = window.get("resetsAt")
-    if not isinstance(timestamp, (int, float)):
-        return ""
-    reset = datetime.fromtimestamp(timestamp).astimezone()
-    return f"{_window_name(window, fallback)} reset {reset:%a %H:%M}"
 
 
 class CodexAdapter:
@@ -91,7 +62,7 @@ class CodexAdapter:
         self.executable = _resolve_codex_executable(executable)
         self.refresh_seconds = max(5, refresh_seconds)
         self._process: subprocess.Popen[bytes] | None = None
-        self._responses: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        self._responses: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=32)
         self._request_lock = threading.Lock()
         self._cache_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -102,31 +73,32 @@ class CodexAdapter:
 
     @staticmethod
     def _empty_snapshot(error: str = "Codex data unavailable") -> dict[str, Any]:
-        return {
-            "codex": {
-                "available": False,
-                "remaining_percent": -1,
-                "weekly_remaining_percent": -1,
-                "reset_at": "",
-                "weekly_reset_at": "",
-                "reset_text": "",
-                "summary": "Codex data unavailable",
-                "source": "Codex App Server",
-                "error": error,
-            },
-            "recent_projects": [],
-        }
+        return {"codex": {"available": False, "windows": [], "error": error}}
+
+    @staticmethod
+    def _deliver(responses: queue.Queue, message: dict | None) -> None:
+        # One serialized request is outstanding. Never let late replies or
+        # unsolicited notifications grow an unbounded long-running queue.
+        while True:
+            try:
+                responses.put_nowait(message)
+                return
+            except queue.Full:
+                try: responses.get_nowait()
+                except queue.Empty: pass
 
     def _reader(self, process: subprocess.Popen[bytes], responses: queue.Queue) -> None:
         assert process.stdout is not None
         try:
             for raw_line in iter(process.stdout.readline, b""):
                 try:
-                    responses.put(json.loads(raw_line.decode("utf-8")))
+                    message = json.loads(raw_line.decode("utf-8"))
+                    if isinstance(message, dict) and "id" in message and ("result" in message or "error" in message):
+                        self._deliver(responses, message)
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     continue
         finally:
-            responses.put(None)
+            self._deliver(responses, None)
 
     def _write(self, message: dict[str, Any]) -> None:
         if self._process is None or self._process.stdin is None:
@@ -159,7 +131,7 @@ class CodexAdapter:
     def _start(self) -> None:
         self._stop()
         creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        self._responses = queue.Queue()
+        self._responses = queue.Queue(maxsize=32)
         self._process = subprocess.Popen(
             [self.executable, "app-server"],
             stdin=subprocess.PIPE,
@@ -224,43 +196,8 @@ class CodexAdapter:
                 self._stop()
                 raise
 
-    @staticmethod
-    def _projects(thread_result: dict[str, Any]) -> list[dict[str, Any]]:
-        projects: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for thread in thread_result.get("data", []):
-            if not isinstance(thread, dict):
-                continue
-            cwd = thread.get("cwd")
-            if not isinstance(cwd, str) or not cwd:
-                continue
-            key = os.path.normcase(os.path.normpath(cwd))
-            if key in seen:
-                continue
-            seen.add(key)
-            path = Path(cwd)
-            projects.append(
-                {
-                    "name": path.name or cwd,
-                    "path": cwd,
-                    "updated_at": _utc_iso(thread.get("updatedAt")),
-                }
-            )
-            if len(projects) == 3:
-                break
-        return projects
-
     def _refresh(self) -> dict[str, Any]:
         limits_result = self._request("account/rateLimits/read")
-        thread_result = self._request(
-            "thread/list",
-            {
-                "limit": 25,
-                "sortKey": "updated_at",
-                "sortDirection": "desc",
-                "sourceKinds": [],
-            },
-        )
 
         by_id = limits_result.get("rateLimitsByLimitId")
         limits = by_id.get("codex") if isinstance(by_id, dict) else None
@@ -270,35 +207,12 @@ class CodexAdapter:
             limits = {}
         primary = limits.get("primary")
         secondary = limits.get("secondary")
-        primary_remaining = _remaining_percent(primary)
-        secondary_remaining = _remaining_percent(secondary)
-        reset_lines = [
-            line
-            for line in (_reset_line(primary, "Primary"), _reset_line(secondary, "Secondary"))
-            if line
-        ]
-        summary_lines = []
-        if primary_remaining >= 0:
-            summary_lines.append(f"{_window_name(primary, 'Primary')} remaining")
-        if secondary_remaining >= 0:
-            summary_lines.append(
-                f"{_window_name(secondary, 'Secondary')} {secondary_remaining}% remaining"
-            )
+        windows = [w for w in (primary, secondary) if isinstance(w, dict)]
         return {
             "codex": {
-                "available": primary_remaining >= 0,
-                "remaining_percent": primary_remaining,
-                "weekly_remaining_percent": secondary_remaining,
-                "reset_at": _utc_iso(primary.get("resetsAt")) if isinstance(primary, dict) else "",
-                "weekly_reset_at": (
-                    _utc_iso(secondary.get("resetsAt")) if isinstance(secondary, dict) else ""
-                ),
-                "reset_text": "\n".join(reset_lines),
-                "summary": "\n".join(summary_lines),
-                "source": "Codex App Server",
-                "plan_type": limits.get("planType"),
+                "available": any(_remaining_percent(w) >= 0 for w in windows),
+                "windows": windows,
             },
-            "recent_projects": self._projects(thread_result),
         }
 
     def _refresh_once(self) -> None:
@@ -306,9 +220,10 @@ class CodexAdapter:
             snapshot = self._refresh()
         except Exception as error:
             if not self._stop_event.is_set():
-                print(f"Codex state refresh failed: {error}")
-            snapshot = self._empty_snapshot(str(error))
+                logging.getLogger("luna.ble.link").warning("Codex state refresh failed: %s", type(error).__name__)
+            snapshot = self._empty_snapshot(type(error).__name__)
         with self._cache_lock:
+            snapshot["sampled_at_ms"] = int(time.time() * 1000)
             self._cached = snapshot
             self._cached_at = time.monotonic()
 
@@ -325,9 +240,9 @@ class CodexAdapter:
             self._refresh_thread.start()
 
     def snapshot(self) -> dict[str, Any]:
-        # USB/HTTP readers never wait for App Server I/O or its request lock.
+        # UI snapshot readers never wait for App Server I/O or its request lock.
         with self._cache_lock:
-            if self._cached_at == 0 or time.monotonic() - self._cached_at >= self.refresh_seconds:
+            if self._cached_at == 0 or time.monotonic() - self._cached_at >= self.refresh_seconds * 2:
                 return self._empty_snapshot("Codex refresh pending")
             return copy.deepcopy(self._cached)
 

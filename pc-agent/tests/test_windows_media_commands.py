@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
+from unittest.mock import Mock
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -69,6 +72,53 @@ async def run_actions(session: FakeSession, *actions: str,
 
 
 class WindowsMediaCommandTests(unittest.TestCase):
+    def test_timed_out_queued_action_is_cancelled_not_left_to_run_later(self):
+        adapter = WindowsMediaAdapter()
+        adapter._loop = Mock()
+        adapter._loop.is_running.return_value = True
+        future = Mock()
+        future.result.side_effect = FutureTimeoutError("queued")
+        def submit(coro, loop):
+            coro.close()
+            return future
+        with patch("windows_media.asyncio.run_coroutine_threadsafe", side_effect=submit):
+            with self.assertRaises(FutureTimeoutError): adapter.execute("music.play")
+        future.cancel.assert_called_once_with()
+
+    def test_stalled_metadata_is_bounded_and_returns_unavailable(self):
+        adapter = WindowsMediaAdapter()
+        async def stalled():
+            await asyncio.Event().wait()
+        class Session:
+            def get_playback_info(self):
+                return SimpleNamespace(playback_status=PlaybackStatus.PAUSED, controls=object())
+            def try_get_media_properties_async(self): return stalled()
+        adapter._choose_session = lambda: Session()
+        original_wait = asyncio.wait_for
+        async def quick_timeout(awaitable, timeout):
+            self.assertEqual(timeout, 2)
+            return await original_wait(awaitable, .01)
+        with patch("windows_media.asyncio.wait_for", side_effect=quick_timeout):
+            self.assertFalse(asyncio.run(adapter._refresh()).available)
+
+    def test_ble_mode_never_accesses_thumbnail_stream(self) -> None:
+        class Properties:
+            title, artist = "Song", "Artist"
+            @property
+            def thumbnail(self): raise AssertionError("cover stream was accessed")
+        class Session:
+            source_app_user_model_id = "player"
+            def get_playback_info(self):
+                return SimpleNamespace(playback_status=PlaybackStatus.PAUSED,
+                    controls=SimpleNamespace(is_play_enabled=True, is_pause_enabled=True,
+                                             is_play_pause_toggle_enabled=True))
+            async def try_get_media_properties_async(self): return Properties()
+        adapter = WindowsMediaAdapter()
+        snapshot = asyncio.run(adapter._read_snapshot(Session()))
+        self.assertEqual(snapshot.title, "Song")
+        self.assertFalse(hasattr(snapshot,"cover_available"))
+        self.assertFalse(hasattr(adapter,"cover"))
+
     def test_explicit_commands_are_sent_even_when_reported_state_matches(self) -> None:
         paused = FakeSession(PlaybackStatus.PAUSED)
         playing = FakeSession(PlaybackStatus.PLAYING)

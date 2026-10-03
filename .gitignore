@@ -7,6 +7,12 @@
 **/managed_components/
 **/sdkconfig
 **/sdkconfig.old
+**/sdkconfig.ble_b0*
+**/build-ble-b0/
+**/sdkconfig.ble_b1*
+**/build-ble-b1/
+pc-agent/.venv-ble/
+pc-agent/.venv-test/
 
 # Local secrets and machine-specific configuration
 **/secrets.h
@@ -15,6 +21,9 @@
 pc-agent/weather-cache.json
 pc-agent/weather-cache.json.tmp
 pc-agent/agent.log*
+pc-agent/ble-link.log*
+pc-agent/ble-resident.log*
+pc-agent/ble-crash.log*
 pc-agent/usb-soak-*.csv
 **/.env
 **/.env.*

@@ -1,0 +1,28 @@
+name: Hosted tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-python:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - name: Install test dependencies
+        run: python -m pip install -r pc-agent/requirements-test.txt
+      - name: Run Windows hosted tests
+        run: python scripts/run-pc-agent-tests.py --hosted
+
+  preview-model:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run dependency-free preview model tests
+        run: node --test docs/design/preview/model.test.mjs

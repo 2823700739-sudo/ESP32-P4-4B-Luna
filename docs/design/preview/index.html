@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>Luna · 月夜桌面伙伴 / U0 交互预览</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14m12-14L8 12l10 7Z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M6 5l10 7L6 19Z"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="m11 4-5 5H3v6h3l5 5Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="m11 4-5 5H3v6h3l5 5Zm5 5 6 6m0-6-6 6"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-weather" viewBox="0 0 24 24"><path d="M8 10a5 5 0 1 1 9 3m-9-9V2m-6 8H0m3-5L1 3m12 1 2-2"/><path d="M6 20a4 4 0 1 1 0-8 6 6 0 0 1 11 1 3.5 3.5 0 1 1 1 7Z"/></symbol>
+    <symbol id="i-computer" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M8 21h8m-4-5v5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-bt" viewBox="0 0 24 24"><path d="m6 7 12 10-6 5V2l6 5L6 17"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0m-9 4a4 4 0 0 1 6 0m-3 4h.01"/></symbol>
+  </defs></svg>
+  <main class="preview-shell">
+    <aside class="studio">
+      <div class="eyebrow">LUNA / DESIGN LAB</div>
+      <h1>把月光，<br>留在桌面。</h1>
+      <p class="intro">五张小卡，一只小伙伴。<br>安静陪着你，也随时回应你。</p>
+      <div class="preview-label"><span></span> U0 · 可交互设计预览</div>
+      <section class="studio-controls" aria-label="预览设置">
+        <label for="scenario">数据场景</label>
+        <select id="scenario">
+          <option value="normal">正常 · 示例连接</option><option value="offline">电脑 / Wi-Fi 离线</option>
+          <option value="empty">无数据 · 等待连接 / 校时</option><option value="stale">数据过期</option>
+          <option value="partial">部分额度 / 传感器不可用</option><option value="long">长中文标题 / 工程名</option>
+          <option value="ble-off">仅断开蓝牙 · Wi-Fi 在线</option><option value="wifi-off">仅断开 Wi-Fi · 蓝牙在线</option>
+        </select>
+        <dl class="studio-meta"><div><dt>供电方式</dt><dd>DC · 常亮，不省电</dd></div><div><dt>当前状态</dt><dd id="mode-label">时钟卡</dd></div></dl>
+      </section>
+      <p class="demo-notice">所有业务数据及连接状态均为示例；时钟使用浏览器本地时间。这里不会控制电脑音乐，也不会连接蓝牙或设备。</p>
+      <p class="instructions">左右滑动切卡 · 点小猫互动<br>顶部空白点击 / 3 分钟无操作进入时钟<br>待机保持常亮 · 轻触返回原卡片</p>
+      <a class="reference-link" href="../ble-ui-references.md">GitHub 借鉴与设计说明 ↗</a>
+    </aside>
+    <section class="stage" aria-label="Luna 720乘720设备界面">
+      <div class="screen-wrap"><div class="display" id="display" tabindex="0" aria-label="Luna 模拟屏幕，左右方向键切换卡片">
+        <div class="stars" aria-hidden="true"></div>
+        <header class="device-header"><div class="brand"><svg><use href="#i-moon"/></svg><span>LUNA<small>your little orbit</small></span></div><span class="connection" id="connection"><svg><use href="#i-bt"/></svg><span>蓝牙 · 示例已连接</span></span></header>
+        <div class="card-deck" id="card-deck"><article class="luna-card" id="card" aria-live="off"></article></div>
+        <button class="pet" id="pet" aria-label="与 Luna 月亮小猫互动"><span class="pet-sprite" id="pet-sprite"></span><span class="pet-bubble" id="pet-bubble" hidden>喵～</span></button>
+        <footer class="device-footer" id="device-footer"><button class="arrow previous-card" id="previous-card" aria-label="上一张卡"><svg><use href="#i-chev"/></svg></button><nav class="card-nav" id="card-nav" aria-label="功能卡切换"></nav><button class="arrow" id="next-card" aria-label="下一张卡"><svg><use href="#i-chev"/></svg></button></footer>
+        <div class="volume-popup" id="volume-popup" hidden><button class="volume-button popup-mute" data-action="mute" aria-label="静音"><svg><use href="#i-volume"/></svg></button><div class="volume-caption"><output id="volume-value">42%</output></div><input id="volume-slider" aria-label="系统音量" type="range" min="0" max="100" value="42"><span class="volume-detail">上下拖动调节 · 示例</span></div>
+        <section id="idle-screen" class="idle-screen" hidden aria-label="待机圆盘时钟"><div class="idle-title">LUNA / MOON CLOCK</div><svg class="analog-clock" viewBox="0 0 440 440" aria-label="时分秒指针时钟"><circle cx="220" cy="220" r="219" class="clock-face"/><g id="clock-ticks"></g><g class="clock-numbers"><text x="220" y="82">12</text><text x="372" y="232">3</text><text x="220" y="384">6</text><text x="68" y="232">9</text></g><line id="hand-hour" x1="220" y1="238" x2="220" y2="110"/><line id="hand-minute" x1="220" y1="238" x2="220" y2="65"/><line id="hand-second" x1="220" y1="238" x2="220" y2="43"/><circle cx="220" cy="220" r="6" class="clock-center"/></svg><div id="idle-date"></div><div id="idle-message">慢慢来，你已经在向前了。</div><span class="sleep-zzz" aria-hidden="true"><span>z</span><span>z</span><span>Z</span></span><div id="sleeping-pet" aria-label="睡觉的 Luna 小猫"><span id="sleeping-sprite"></span></div></section>
+      </div></div>
+      <div class="stage-caption"><span>720 × 720</span><span>MOONLIGHT / v0.1</span><span>590 × 450 卡体</span></div>
+    </section>
+  </main>
+</body>
+</html>

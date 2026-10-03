@@ -1,4 +1,5 @@
 #include "luna_weather.h"
+#include "luna_weather_parse.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -43,6 +44,7 @@ static const char *TAG = "luna_weather";
 static SemaphoreHandle_t s_mutex;
 static TaskHandle_t s_task;
 static luna_weather_state_t s_weather;
+static luna_weather_metrics_t s_metrics;
 static luna_weather_update_cb_t s_callback;
 static void *s_callback_context;
 static bool s_network_ready;
@@ -125,12 +127,8 @@ static void load_cache(void)
     if (current_cache && cache.last_trusted_utc >= 1700000000 &&
         cache.last_trusted_utc <= 4102444800LL) {
         s_last_trusted_utc = cache.last_trusted_utc;
-        if (time(NULL) < 1700000000) {
-            const struct timeval restored = {.tv_sec = (time_t)s_last_trusted_utc};
-            if (settimeofday(&restored, NULL) == 0) {
-                ESP_LOGW(TAG, "Clock estimated from last trusted weather time; waiting for NTP");
-            }
-        }
+        // The new BLE profile must reacquire time after a reboot. A saved
+        // weather timestamp is cache metadata, not a battery-backed RTC.
     }
     ESP_LOGI(TAG, "Loaded device weather location and cache from NVS");
 }
@@ -153,103 +151,7 @@ static esp_err_t weather_http_event(esp_http_client_event_t *event)
     return ESP_OK;
 }
 
-static bool json_number(const cJSON *object, const char *key, double minimum,
-                        double maximum, double *value)
-{
-    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
-    if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) ||
-        item->valuedouble < minimum || item->valuedouble > maximum) {
-        return false;
-    }
-    *value = item->valuedouble;
-    return true;
-}
-
-static bool first_daily_number(const cJSON *daily, const char *key, double minimum,
-                               double maximum, double *value)
-{
-    const cJSON *array = cJSON_GetObjectItemCaseSensitive(daily, key);
-    const cJSON *item = cJSON_IsArray(array) ? cJSON_GetArrayItem(array, 0) : NULL;
-    if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) ||
-        item->valuedouble < minimum || item->valuedouble > maximum) {
-        return false;
-    }
-    *value = item->valuedouble;
-    return true;
-}
-
-static const char *condition_for_code(int code)
-{
-    switch (code) {
-    case 0: return "晴朗";
-    case 1: return "晴间多云";
-    case 2: return "多云";
-    case 3: return "阴";
-    case 45: case 48: return "雾";
-    case 51: case 53: case 55: case 56: case 57: return "毛毛雨";
-    case 61: case 63: case 65: case 66: case 67: return "雨";
-    case 71: case 73: case 75: case 77: return "雪";
-    case 80: case 81: case 82: return "阵雨";
-    case 85: case 86: return "阵雪";
-    case 95: case 96: case 99: return "雷暴";
-    default: return "天气变化";
-    }
-}
-
-static esp_err_t parse_forecast(const char *json, luna_weather_state_t *weather)
-{
-    cJSON *root = cJSON_Parse(json);
-    if (!cJSON_IsObject(root)) {
-        cJSON_Delete(root);
-        return ESP_ERR_INVALID_RESPONSE;
-    }
-    const cJSON *current = cJSON_GetObjectItemCaseSensitive(root, "current");
-    const cJSON *daily = cJSON_GetObjectItemCaseSensitive(root, "daily");
-    const cJSON *observed = cJSON_GetObjectItemCaseSensitive(current, "time");
-    double temperature, apparent, humidity, wind, code, high, low, rain;
-    const bool valid = cJSON_IsObject(current) && cJSON_IsObject(daily) &&
-        cJSON_IsString(observed) && observed->valuestring != NULL &&
-        strlen(observed->valuestring) >= 16 &&
-        json_number(current, "temperature_2m", -100, 80, &temperature) &&
-        json_number(current, "apparent_temperature", -120, 90, &apparent) &&
-        json_number(current, "relative_humidity_2m", 0, 100, &humidity) &&
-        json_number(current, "wind_speed_10m", 0, 500, &wind) &&
-        json_number(current, "weather_code", 0, 99, &code) &&
-        first_daily_number(daily, "temperature_2m_max", -100, 80, &high) &&
-        first_daily_number(daily, "temperature_2m_min", -100, 80, &low);
-    if (!valid) {
-        cJSON_Delete(root);
-        return ESP_ERR_INVALID_RESPONSE;
-    }
-    const bool have_rain = first_daily_number(daily, "precipitation_probability_max",
-                                               0, 100, &rain);
-    weather->available = true;
-    weather->stale = false;
-    weather->temperature_c = (int)lround(temperature);
-    strlcpy(weather->condition, condition_for_code((int)lround(code)),
-            sizeof(weather->condition));
-    strlcpy(weather->observed_at, observed->valuestring, sizeof(weather->observed_at));
-    snprintf(weather->summary, sizeof(weather->summary), "%s\n%s\nFeels %d C | Humidity %d%%",
-             weather->condition, weather->location, (int)lround(apparent),
-             (int)lround(humidity));
-    char rain_text[16];
-    if (have_rain) {
-        snprintf(rain_text, sizeof(rain_text), "%d%%", (int)lround(rain));
-    } else {
-        strlcpy(rain_text, "--", sizeof(rain_text));
-    }
-    snprintf(weather->details, sizeof(weather->details),
-             "H %d / L %d C | Rain %s\nWind %d km/h\n%.4f %c | %.4f %c\n"
-             "Updated %.5s %.5s\nOpen-Meteo / Luna Wi-Fi",
-             (int)lround(high), (int)lround(low), rain_text, (int)lround(wind),
-             fabs(weather->latitude), weather->latitude >= 0 ? 'N' : 'S',
-             fabs(weather->longitude), weather->longitude >= 0 ? 'E' : 'W',
-             observed->valuestring + 5, observed->valuestring + 11);
-    cJSON_Delete(root);
-    return ESP_OK;
-}
-
-static esp_err_t fetch_forecast(luna_weather_state_t *weather)
+static esp_err_t fetch_forecast(luna_weather_state_t *weather, luna_weather_metrics_t *metrics)
 {
     char url[WEATHER_URL_CAPACITY];
     const int written = snprintf(
@@ -257,7 +159,7 @@ static esp_err_t fetch_forecast(luna_weather_state_t *weather)
         "https://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f"
         "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
         "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max"
-        "&timezone=auto&forecast_days=1",
+        "&timezone=auto&forecast_days=1&temperature_unit=celsius&wind_speed_unit=ms",
         weather->latitude, weather->longitude);
     if (written <= 0 || (size_t)written >= sizeof(url)) {
         return ESP_ERR_INVALID_SIZE;
@@ -284,7 +186,7 @@ static esp_err_t fetch_forecast(luna_weather_state_t *weather)
     esp_err_t parsed = result;
     if (parsed == ESP_OK) {
         parsed = status == 200 && !response->overflow && response->length > 0
-                     ? parse_forecast(response->data, weather)
+                     ? luna_weather_parse_forecast(response->data, weather, metrics)
                      : ESP_ERR_INVALID_RESPONSE;
     }
     free(response);
@@ -317,19 +219,22 @@ static void weather_task(void *arg)
             continue;
         }
         if (time(NULL) < 1700000000) {
-            ESP_LOGW(TAG, "Waiting for NTP before HTTPS weather request");
+            ESP_LOGW(TAG, "Waiting for valid time before HTTPS weather request");
             next_fetch_us = now_us + (int64_t)WEATHER_CLOCK_RETRY_SECONDS * 1000000;
             continue;
         }
 
         luna_weather_state_t fetched = settings;
-        const esp_err_t result = fetch_forecast(&fetched);
+        luna_weather_metrics_t metrics = {0};
+        ESP_LOGI(TAG, "Device HTTPS weather request started");
+        const esp_err_t result = fetch_forecast(&fetched, &metrics);
         luna_weather_state_t published;
         bool should_publish = false;
         xSemaphoreTake(s_mutex, portMAX_DELAY);
         if (s_network_ready && same_location(&settings, &s_weather)) {
             if (result == ESP_OK) {
                 s_weather = fetched;
+                s_metrics = metrics;
                 s_last_trusted_utc = time(NULL);
                 save_cache_locked();
                 next_fetch_us = esp_timer_get_time() +
@@ -349,54 +254,6 @@ static void weather_task(void *arg)
             publish(&published);
         }
     }
-}
-
-static bool parse_utc_timestamp(const char *value, int64_t *epoch)
-{
-    if (value == NULL || strlen(value) < 20 || value[4] != '-' || value[7] != '-' ||
-        value[10] != 'T' || value[13] != ':' || value[16] != ':' || value[19] != 'Z') {
-        return false;
-    }
-    int year, month, day, hour, minute, second;
-    if (sscanf(value, "%4d-%2d-%2dT%2d:%2d:%2dZ", &year, &month, &day,
-               &hour, &minute, &second) != 6 ||
-        year < 2024 || year > 2100 || month < 1 || month > 12 ||
-        day < 1 || day > 31 || hour < 0 || hour > 23 ||
-        minute < 0 || minute > 59 || second < 0 || second > 60) {
-        return false;
-    }
-    year -= month <= 2;
-    const int era = year / 400;
-    const unsigned year_of_era = (unsigned)(year - era * 400);
-    const unsigned day_of_year = (153U * (unsigned)(month + (month > 2 ? -3 : 9)) + 2U) / 5U +
-                                 (unsigned)day - 1U;
-    const unsigned year_of_era_day = year_of_era * 365U + year_of_era / 4U -
-                                     year_of_era / 100U + day_of_year;
-    const int64_t days = (int64_t)era * 146097 + year_of_era_day - 719468;
-    *epoch = days * 86400 + hour * 3600 + minute * 60 + second;
-    return *epoch >= 1700000000 && *epoch <= 4102444800LL;
-}
-
-void luna_weather_accept_pc_time(const char *generated_at_utc)
-{
-    if (s_mutex == NULL || time(NULL) >= 1700000000) {
-        return;
-    }
-    int64_t epoch;
-    if (!parse_utc_timestamp(generated_at_utc, &epoch)) {
-        return;
-    }
-    const struct timeval restored = {.tv_sec = (time_t)epoch};
-    if (settimeofday(&restored, NULL) != 0) {
-        return;
-    }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-    s_last_trusted_utc = epoch;
-    save_cache_locked();
-    s_refresh_requested = true;
-    xSemaphoreGive(s_mutex);
-    ESP_LOGW(TAG, "Clock estimated from authenticated PC time; waiting for NTP");
-    xTaskNotifyGive(s_task);
 }
 
 esp_err_t luna_weather_start(luna_weather_update_cb_t callback, void *context)
@@ -420,7 +277,7 @@ esp_err_t luna_weather_start(luna_weather_update_cb_t callback, void *context)
     return ESP_OK;
 }
 
-void luna_weather_accept_pc_settings(const luna_weather_state_t *pc_weather)
+void luna_weather_set_location(const luna_weather_state_t *pc_weather)
 {
     if (s_mutex == NULL || !location_is_valid(pc_weather)) {
         return;
@@ -430,6 +287,7 @@ void luna_weather_accept_pc_settings(const luna_weather_state_t *pc_weather)
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     if (!same_location(&s_weather, pc_weather)) {
         memset(&s_weather, 0, sizeof(s_weather));
+        memset(&s_metrics, 0, sizeof(s_metrics));
         s_weather.configured = true;
         s_weather.coordinates_valid = true;
         s_weather.latitude = pc_weather->latitude;
@@ -477,4 +335,11 @@ void luna_weather_set_network_ready(bool ready)
     if (ready) {
         xTaskNotifyGive(s_task);
     }
+}
+
+bool luna_weather_snapshot(luna_weather_state_t *weather, luna_weather_metrics_t *metrics)
+{
+    if (!weather || !metrics || !s_mutex || xSemaphoreTake(s_mutex, pdMS_TO_TICKS(5)) != pdTRUE) return false;
+    *weather = s_weather; *metrics = s_metrics;
+    xSemaphoreGive(s_mutex); return true;
 }

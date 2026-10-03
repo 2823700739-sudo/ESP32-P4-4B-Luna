@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.20)
+project(luna_native_ui C CXX)
+set(REPO "${CMAKE_CURRENT_LIST_DIR}/../..")
+get_filename_component(REPO "${REPO}" ABSOLUTE)
+set(LV_BUILD_CONF_PATH "${CMAKE_CURRENT_LIST_DIR}/lv_conf.h" CACHE PATH "" FORCE)
+set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "" FORCE)
+set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "" FORCE)
+add_subdirectory("${REPO}/firmware/luna-panel/managed_components/lvgl__lvgl" lvgl)
+file(GLOB ASSETS "${REPO}/firmware/luna-panel/main/assets/*.c")
+add_executable(luna_ui_test ui_test.c "${REPO}/firmware/luna-panel/main/luna_ui_motion.c"
+  "${REPO}/firmware/luna-panel/main/luna_font_decode.c" ${ASSETS})
+target_compile_definitions(luna_ui_test PRIVATE LUNA_NATIVE_UI=1)
+target_include_directories(luna_ui_test PRIVATE "${REPO}/firmware/luna-panel/main"
+  "${REPO}/pc-agent/tests/native_music" "${REPO}/firmware/luna-panel/managed_components/espressif__cjson/cJSON")
+target_compile_options(luna_ui_test PRIVATE -include "${CMAKE_CURRENT_LIST_DIR}/compat.h")
+target_link_libraries(luna_ui_test PRIVATE lvgl m)

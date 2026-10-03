@@ -1,36 +1,18 @@
-"""Bounded, shared USB/HTTP action history; never replay an uncertain command."""
+"""Bounded action history for Luna BLE; never replay an uncertain command."""
 
 from __future__ import annotations
 
 from collections import OrderedDict
 from copy import deepcopy
-import json
 import threading
 import time
 from typing import Any, Callable
 
 
 SUPPORTED_ACTIONS = frozenset({
-    "music.previous", "music.play", "music.pause", "music.play_pause", "music.next",
-    "music.volume_down", "music.volume_up", "music.volume_set", "music.mute",
+    "music.previous", "music.play", "music.pause", "music.next",
+    "music.volume_set", "music.mute",
 })
-
-
-def parse_action_request(payload: bytes) -> tuple[str, str, Any]:
-    if len(payload) > 4096:
-        raise ValueError("action payload is too large")
-    try:
-        body = json.loads(payload.decode("utf-8"))
-    except RecursionError as error:
-        raise ValueError("action object is too deeply nested") from error
-    if not isinstance(body, dict):
-        raise ValueError("invalid action object")
-    request_id, action = body.get("request_id"), body.get("action")
-    if not isinstance(request_id, str) or not request_id or len(request_id) > 80:
-        raise ValueError("invalid request id")
-    if not isinstance(action, str) or not action or len(action) > 64:
-        raise ValueError("invalid action name")
-    return request_id, action, body.get("value")
 
 
 class ActionHistory:

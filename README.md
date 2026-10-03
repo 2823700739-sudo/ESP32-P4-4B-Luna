@@ -1,90 +1,57 @@
 # Luna desktop companion
 
-Luna is a desktop card display and touch controller for the Waveshare
-ESP32-P4-86-Panel-ETH-2RO (SKU 31570). The target board has ESP32-P4 silicon
-revision 1.3 and is powered over USB-C. The current firmware uses native USB
-OTG as the primary PC link, with Wi-Fi for independent network services and
-fallback connectivity. See the
-[product restart plan](docs/ideas/luna-desktop-companion.md).
+Luna runs on the ESP32-P4-4B touch panel. The current product uses **BLE for PC control/state**, **Wi-Fi for device-owned weather and backup NTP time**. The user's device is DC-powered and always on; UART is only for development/flashing. No USB OTG application, microphone, speech recognition or album-cover pipeline is included.
 
-The project is split into:
+## Current scope
 
-- `firmware/luna-panel`: ESP-IDF firmware for the panel.
-- `pc-agent`: Windows companion service for panel state and media controls.
-- `docs/ideas`: product scope and feasibility decisions.
-- `docs/development`: repeatable build, flash, and hardware validation notes.
+- Approved moon-night/starfield UI: five swipeable cards, side edges, default digital clock and interactive pixel cat.
+- Real BLE music controls and Windows system volume; one right-side volume button opens a vertical slider with mute at its top.
+- Independent Wi-Fi weather and BLE-first clock.
+- Live Codex five-hour/week remaining quota over App Server; real Windows CPU, primary GPU, physical RAM and dedicated VRAM over secured BLE. Missing values remain `--`; unsupported temperatures are unavailable. VS Code project names come only from a recognized foreground VS Code workspace title, retained while another app is foreground.
+- Top blank-area tap (above the card, y < 135) or three minutes without input opens a three-hand analog clock with sleeping cat, animated ZZZ and one warm sentence. Card/side/bottom blanks, logo/status and cat taps do not manually enter idle. First touch returns to the previous card without triggering controls. Brightness stays unchanged; standby reduces UI work, not hardware frequency.
+- Keep normal brightness, configured 360 MHz CPU and local dirty-region redraw for responsiveness, including the standby clock. No automatic dimming or CPU power-saving frequency scaling.
 
-The firmware baseline is the existing ESP-IDF v6.0.2 checkout at
-`D:\.espressif\v6.0.2\esp-idf`.
+## Build and run
 
-## Current milestone
+Install ESP-IDF 6.0.2 for ESP32-P4, then set `IDF_PATH` to that installation's
+`esp-idf` directory. Set `IDF_TOOLS_PATH` only if the tools are not in the
+standard per-user `.espressif` directory. Both paths can instead be supplied
+as `-IdfPath` and `-IdfToolsPath` to the build script. From the repository root:
 
-The active implementation milestone is **R5 stability and diagnostics**. PC
-state and media actions are already available over USB CDC, and R3 enforces a
-single active PC transport. Hardware acceptance for USB covers, repeated
-reconnects, and Wi-Fi fallback remains open. See
-[R3 双通道切换验证](docs/development/r3-dual-transport.md).
-Device-owned weather has passed an Agent-offline reboot smoke test; see
-[R4 面板独立联网天气](docs/development/r4-device-weather.md).
-The first R5 changes add persistent Wi-Fi recovery and runtime diagnostics;
-see [R5 稳定性与诊断](docs/development/r5-stability.md).
-The diagnostics screen also tracks USB opens, handshakes, exchanges, and errors
-for reconnection testing.
-Runtime diagnostics are also sent over USB to the Agent for device reboot and
-memory records; see [USB 设备运行状态同步](docs/development/r5-device-diagnostics.md).
-USB and HTTP now share bounded action results, including failure and uncertain
-outcomes; see [动作防重放与真实结果](docs/development/r5-action-results.md).
-Codex and music cards now mark last-known PC data when the PC link is offline;
-music and volume controls remain disabled until the link recovers.
-The Windows Agent now supports per-user login auto-start, so USB OTG plug-in
-can reconnect without manually running a script after each login; see
-[Windows 助手启动说明](pc-agent/README.md).
+```powershell
+.\scripts\build-firmware.ps1
+```
 
-Implementation and hardware acceptance steps are in
-[R1 USB P0 实机验证](docs/development/r1-usb-p0.md).
-USB state and action migration is tracked in
-[R2 USB 状态与动作验证](docs/development/r2-usb-state-actions.md).
+[Windows companion setup](pc-agent/README.md) covers its Python environment,
+BLE connection, login resident, and reproducible test commands. Install it
+before starting the link.
 
-Voice control is paused. The firmware no longer loads ESP-SR speech models,
-listens for a wake word, or executes spoken commands. The microphone level
-meter remains on the hardware diagnostics screen. Any future AI assistant is
-a separate design decision.
+For a local configuration change, run `.\scripts\build-firmware.ps1 -Action reconfigure`
+before building. Flashing and monitoring require `-Port` with the port detected
+on that machine; coordinate with the running BLE Agent before a device update.
+A plain build does not open the serial port.
+The bounded read-only UART observers also require an explicit `--port`; check
+the current port before running either observer.
 
-P1 provides the desktop card experience:
-a four-card horizontal carousel: a combined Codex quota and current-project
-workspace, music, weather, and a standalone clock with a built-in background.
-The firmware keeps only the current card and its two neighbours instantiated. The
-panel connects to a small Windows companion over the local network. The music
-card reads the real NetEase Cloud Music title, artist, cover and playback state
-through Windows GSMTC, and can send previous, play/pause, and next commands.
-The Codex workspace card reads the signed-in account's live primary and weekly
-rate-limit windows through the local Codex App Server, and identifies the most
-recent project from thread workspaces. The weather card uses configured
-coordinates to show live Open-Meteo conditions and explicitly marks cached data
-during an outage. The original hardware checks remain available from the home
-screen. The clock synchronizes over Wi-Fi and keeps running while the Windows
-companion is unavailable, as long as the panel remains powered.
+For persistent PC operation independent of the development tool, install the current-user Windows task once with `pc-agent/manage-ble-resident.ps1 -Action Install`, then `-Action Start`. It starts at login and recovers unexpectedly exited BLE workers without replaying music actions. See the PC companion README for status/stop/removal. The old USB task stays disabled.
 
-Start with the current [590×450 音乐控制卡实机验证](docs/development/p1-music-controls-590x450.md).
-For the clock and four-card carousel, use
-[壁纸时钟卡实机验证](docs/development/p1-clock-card.md).
-For the no-voice regression checks, use
-[无语音版本实机验证](docs/development/no-voice-validation.md).
-For carousel and long-run checks, use
-[P1 stability and carousel validation](docs/development/p1-stability-carousel.md).
-For the latest swipe animation and black-area check, use
-[卡片滑动与果冻回弹实机验证](docs/development/p1-jelly-carousel.md).
-For the initial connection checks, use
-[P1 card and Windows-agent validation](docs/development/p1-card-agent.md).
-For the latest music metadata and cover checks, use
-[P1 music card validation](docs/development/p1-music-card.md).
-For live Codex quota and project checks, use
-[P1 Codex card validation](docs/development/p1-codex-card.md).
-For configured coordinates, live weather, and cache checks, use
-[P1 weather card validation](docs/development/p1-weather-card.md).
-Use [P0 bring-up](docs/development/p0-bringup.md) when diagnosing the board.
+The default is now the current B1 product (`build-ble-b1` / `sdkconfig.ble_b1`). `-BleB0` is an explicit secured-BLE diagnostic, not the removed USB/HTTP product. Do not flash historical binaries from the old ignored `build` directory.
 
-## Documentation language
+The 10 MiB app partition preserves NVS, PHY and storage offsets. Never erase NVS/TF/C6 during routine updates. Wi-Fi credentials remain in ignored local sdkconfig; do not commit them.
 
-面向使用者的实机验证、操作步骤、测试记录和故障排查文档统一使用中文；
-命令、接口路径、配置项名称和原始日志按实际内容保留。
+## UI and verification
+
+- [Interactive approved preview](docs/design/preview/index.html)
+- [Documentation index](docs/README.md)
+- [Current development status](docs/development/current-status.md)
+- [New-session handoff](HANDOFF.md)
+- [UI references](docs/design/ble-ui-references.md)
+- [Current hardware record](docs/development/b1-music-bringup.md)
+- [Performance and cleanup](docs/development/ui-performance-20261002.md)
+- [Assets and font license](firmware/luna-panel/main/assets/README.md)
+
+Local native LVGL tests do not replace inspection of the actual screen or physical touch testing.
+
+## Retired implementation
+
+The old USB/HTTP/audio implementation and its transport tests were removed after preserving their contents, including uncommitted changes, in a local backup outside the checkout. The old Windows scheduled task is disabled; the BLE resident is retained. Retired-route documents were also backed up locally before removal. These backups are maintainer recovery copies, not project build inputs or release artifacts. Current documentation is indexed above; retained BLE records are maintenance evidence, not configuration authority.

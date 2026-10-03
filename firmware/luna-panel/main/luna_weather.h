@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 #include "esp_err.h"
-#include "luna_agent_client.h"
+#include "luna_weather_state.h"
 
 typedef void (*luna_weather_update_cb_t)(const luna_weather_state_t *state, void *context);
 
@@ -11,10 +11,10 @@ typedef void (*luna_weather_update_cb_t)(const luna_weather_state_t *state, void
 esp_err_t luna_weather_start(luna_weather_update_cb_t callback, void *context);
 
 /** The PC may provision a location, but never supplies the displayed weather data. */
-void luna_weather_accept_pc_settings(const luna_weather_state_t *pc_weather);
-
-/** Seed the HTTPS clock from an authenticated PC snapshot when NTP is unavailable. */
-void luna_weather_accept_pc_time(const char *generated_at_utc);
+void luna_weather_set_location(const luna_weather_state_t *pc_weather);
 
 /** Called by Wi-Fi events; a disconnect marks the last result as cached. */
 void luna_weather_set_network_ready(bool ready);
+
+/** Copy one coherent device-owned snapshot. Does not initiate a network request. */
+bool luna_weather_snapshot(luna_weather_state_t *weather, luna_weather_metrics_t *metrics);

@@ -1,80 +1,53 @@
-menu "Luna P0 Configuration"
+menu "Luna Current Product"
+
+    config LUNA_BLE_B0
+        bool "Build the isolated Luna BLE B0 diagnostic application"
+        default n
+        depends on BT_NIMBLE_ENABLED && ESP_HOSTED_ENABLE_BT_NIMBLE
+        help
+            Minimal paired GATT hello/ping/time diagnostic only. Does not start
+            USB CDC, the old HTTP Agent client, music, or cover tasks.
+            Use the separate build-firmware.ps1 -BleB0 profile.
+
+    config LUNA_BLE_B0_LEGACY_HCI_PROBE
+        bool "Allow diagnostic HCI probe for old pre-2.5.2 C6 firmware"
+        default n
+        depends on LUNA_BLE_B0
+        help
+            Old Hosted firmware enables its Bluetooth controller at boot and
+            lacks the newer controller-init RPC. If both version and init RPCs
+            fail, try NimBLE HCI synchronization, without changing C6 flash.
+            Diagnostic only; failure is not evidence of a working controller.
+
+    config LUNA_BLE_B0_WIFI_TEST
+        bool "Run device weather Wi-Fi alongside the B0 BLE diagnostic"
+        default n
+        depends on LUNA_BLE_B0
+        help
+            Optional coexistence gate using current C6 firmware, local Wi-Fi
+            credentials and the weather location/cache already saved in NVS.
+            Does not start the PC HTTP channel, NTP or USB CDC. BLE supplies
+            valid time before HTTPS. No restore of a saved timestamp as a clock.
+
+    config LUNA_BLE_B1_MUSIC
+        bool "Run the current five-card Luna product"
+        default n
+        depends on LUNA_BLE_B0
+        help
+            Reuse the secured BLE transport with bounded music snapshots and
+            a non-replaying action FIFO. Fixed player, no covers/USB/PC HTTP.
+            Five approved cards, interactive pet and independent weather.
 
     config LUNA_WIFI_SSID
         string "2.4 GHz Wi-Fi SSID"
         default ""
         help
-            Network name used by the P0 firmware. Stored only in the generated sdkconfig.
+            Network name used by the Luna firmware. Stored only in the generated sdkconfig.
 
     config LUNA_WIFI_PASSWORD
         string "Wi-Fi password"
         default ""
         help
-            Network password used by the P0 firmware. Stored only in the generated sdkconfig.
-
-    config LUNA_WIFI_MAXIMUM_RETRY
-        int "Maximum immediate Wi-Fi connection retries"
-        default 10
-        range 1 100
-        help
-            After these immediate retries, Luna keeps retrying every 30 seconds.
-
-    config LUNA_AGENT_HOST
-        string "Windows companion IPv4 address"
-        default ""
-        help
-            IPv4 address of the Windows PC running the Luna companion service.
-
-    config LUNA_AGENT_PORT
-        int "Windows companion TCP port"
-        default 8765
-        range 1024 65535
-
-    config LUNA_AGENT_TOKEN
-        string "Windows companion pairing token"
-        default ""
-        help
-            Shared local-network token. Store it only in the generated sdkconfig.
-
-    config LUNA_AGENT_POLL_SECONDS
-        int "Windows companion polling interval (seconds)"
-        default 5
-        range 1 60
-
-    config LUNA_ENABLE_TF_TEST
-        bool "Run the TF-card read/write test during startup"
-        default n
-        help
-            Keep disabled during Wi-Fi stability testing. The ESP32-C6 hosted
-            Wi-Fi transport and the TF card both use SDMMC controllers, so the
-            storage test should only run when a card is inserted and storage is
-            being tested intentionally.
-
-    config LUNA_SPEAKER_VOLUME
-        int "Hardware-check speaker volume"
-        default 35
-        range 0 100
-        help
-            Output volume used by the short speaker diagnostic tone.
-
-    config LUNA_MIC_GAIN_DB
-        int "Microphone input gain (dB)"
-        default 24
-        range 0 37
-        help
-            ES7210 input gain. 24 dB matches the Waveshare ESP-IDF audio
-            example and is suitable for speech near a desktop device.
-
-    config LUNA_NTP_SERVER
-        string "Clock NTP server"
-        default "pool.ntp.org"
-        help
-            Network time source used by the standalone clock card.
-
-    config LUNA_TIMEZONE
-        string "Clock POSIX timezone"
-        default "CST-8"
-        help
-            POSIX timezone string. CST-8 displays China Standard Time.
+            Network password used by the Luna firmware. Stored only in the generated sdkconfig.
 
 endmenu

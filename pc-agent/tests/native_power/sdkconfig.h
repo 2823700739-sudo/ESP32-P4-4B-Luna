@@ -1,0 +1,3 @@
+#pragma once
+#define CONFIG_PM_ENABLE 1
+#define CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ 360
