@@ -3,7 +3,7 @@
 The active entry point is `luna_ble_link.py`. It uses paired, encrypted BLE named **Luna**; it never opens a COM port or listens on HTTP. Music metadata/control uses Windows GSMTC; volume/mute uses the system volume adapter. No album-cover stream is read.
 
 ```powershell
-py -3 -m venv pc-agent/.venv-ble
+py -3.10 -m venv pc-agent/.venv-ble
 .\pc-agent\.venv-ble\Scripts\python.exe -m pip install -r pc-agent/requirements-ble-music.txt
 .\pc-agent\start-ble-link.ps1 -Music
 ```
@@ -53,7 +53,7 @@ Windows metrics are sampled every 2 seconds with GetSystemTimes, GlobalMemorySta
 
 Metric initialization retries with interruptible 2–30 second backoff. A failed GPU query is closed and reinitialized after a 30-second cooldown, including adapter re-enumeration; CPU/RAM/project sampling continues independently. Unsupported GPU providers remain unavailable, not zero. Failed PDH initialization releases its query, and repeated service starts do not create duplicate sampling threads.
 If collection succeeds but every formatted GPU array read fails, the same cooldown/rebuild path applies. A readable array (including an empty one) is preserved when another array fails, so partial GPU data does not cause unnecessary query rebuilding.
-If the whole PC metric sample fails three times in a row, the collector is closed and recreated with interruptible 2–30 second backoff. A single transient failure keeps the existing collector; the failed sample stays unavailable rather than appearing as zero. This recovery path has a simulated regression, but has not been exercised against a real Windows driver or sleep/wake failure, and the running resident may still have older code until intentionally restarted.
+If the whole PC metric sample fails three times in a row, the collector is closed and recreated with interruptible 2–30 second backoff. A single transient failure keeps the existing collector; the failed sample stays unavailable rather than appearing as zero. This recovery path has a simulated regression, but has not been exercised against a real Windows driver or sleep/wake failure, and does not establish hardware fault acceptance. The current recovery fixes were loaded into the resident on 2026-10-03; consult the current status for subsequent changes.
 
 BLE negotiates the `dashboard` feature, sends cached read-only snapshots at most every 2 seconds, and prioritizes music actions. Existing music-only firmware is compatible and doesn't receive unsupported dashboard messages. Firmware validates the entire snapshot atomically; disconnected/expired readings are visibly marked. This collector never opens COM ports or an HTTP listener.
 
