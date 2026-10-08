@@ -10,13 +10,18 @@ param(
     [string]$Port,
 
     [switch]$BleB0,
-    [switch]$BleB1
+    [switch]$BleB1,
+
+    [switch]$PublicRelease
 )
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repositoryRoot 'firmware\luna-panel'
 if ($BleB0 -and $BleB1) { throw 'Choose one BLE profile.' }
+if ($PublicRelease -and ($BleB0 -or $Action -in @('flash', 'monitor'))) {
+    throw 'PublicRelease only builds/reconfigures the B1 product; it never accesses a device.'
+}
 $BleB1 = -not $BleB0
 
 if (-not $IdfPath) { $IdfPath = $env:IDF_PATH }
@@ -34,7 +39,16 @@ if ($Action -in @('flash', 'monitor') -and -not $Port) {
     throw "Specify -Port for $Action after checking the current device port."
 }
 
-$buildPath = Join-Path $projectPath $(if ($BleB1) { 'build-ble-b1' } else { 'build-ble-b0' })
+$buildPath = Join-Path $projectPath $(if ($PublicRelease) { 'build-public-b1' } elseif ($BleB1) { 'build-ble-b1' } else { 'build-ble-b0' })
+$sdkconfigPath = Join-Path $projectPath $(if ($PublicRelease) { 'sdkconfig.public_b1' } elseif ($BleB1) { 'sdkconfig.ble_b1' } else { 'sdkconfig.ble_b0' })
+function Assert-PublicConfig {
+    if ($PublicRelease -and (Test-Path -LiteralPath $sdkconfigPath)) {
+        if (Select-String -LiteralPath $sdkconfigPath -Pattern '^CONFIG_LUNA_WIFI_(SSID|PASSWORD)=".+"' -Quiet) {
+            throw 'PublicRelease configuration contains Wi-Fi credentials. Keep it private; use an empty public configuration.'
+        }
+    }
+}
+Assert-PublicConfig
 $exportScript = Join-Path $IdfPath 'export.ps1'
 
 if (-not (Test-Path -LiteralPath $exportScript)) {
@@ -67,7 +81,11 @@ Push-Location $projectPath
 try {
     $profileArguments = @('-B', $buildPath, '-D', 'LUNA_BLE_B0_BUILD=ON',
       '-D', "LUNA_BLE_B1_BUILD=$(if ($BleB1) {'ON'} else {'OFF'})",
-      '-D', "SDKCONFIG=$(Join-Path $projectPath $(if ($BleB1) {'sdkconfig.ble_b1'} else {'sdkconfig.ble_b0'}))")
+      '-D', "SDKCONFIG=$sdkconfigPath", '-D', "LUNA_PUBLIC_RELEASE=$(if ($PublicRelease) {'ON'} else {'OFF'})")
+    if ($PublicRelease) {
+        # Large full-font builds exceed Windows command-line limits without response files.
+        $profileArguments += @('-D', 'CMAKE_NINJA_FORCE_RESPONSE_FILE=ON')
+    }
     [string[]]$arguments = if ($Action -in @('flash', 'monitor')) { @('-p', $Port, $Action) } else { @($Action) }
     & idf.py @profileArguments @arguments 2>&1 | ForEach-Object {
         $line = [string]$_
@@ -76,4 +94,5 @@ try {
         } else { Write-Output $line }
     }
     if ($LASTEXITCODE -ne 0) { throw "idf.py $Action failed: $LASTEXITCODE" }
+    Assert-PublicConfig
 } finally { Pop-Location }

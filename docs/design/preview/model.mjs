@@ -49,7 +49,7 @@ export function demoSnapshot(scenario = 'normal') {
     weather: { available: !empty, cached: !wifi || stale, temperature: 23, feels: 22, humidity: 64, wind: 2.1, city: long ? '上海 · 浦东新区 · 张江科技园' : '上海', condition: '多云', updated: '10:24' },
     quota: { primary: empty ? null : 72, weekly: empty || partial ? null : 41, updated: empty ? '--' : '10:24' },
     project: { available: !empty, name: long ? 'Luna桌面伴侣-蓝牙无线版-多工作区界面与资源验证工程' : 'ESP32-P4-4B-Luna', stale: stale || !pc, source: 'VS Code', updated: '10:24' },
-    computer: { available: !empty, cpu: empty ? null : 37, gpu: empty || partial ? null : 24, cpuTemp: empty || partial ? null : 52, gpuTemp: empty || partial ? null : 46, ram: empty ? null : 43, vram: empty || partial ? null : 31, ramLabel: '13.8 / 32 GB', vramLabel: '2.5 / 8 GB', name: empty ? '等待电脑连接' : long ? 'Luna-Desktop · 示例主显卡名称过长时限定显示区域' : 'Luna-Desktop · 主 GPU' },
+    computer: { available: !empty, cpu: empty ? null : 37, gpu: empty || partial ? null : 24, cpuTemp: null, gpuTemp: null, ram: empty ? null : 43, vram: empty || partial ? null : 31, ramLabel: '13.8 / 32 GB', vramLabel: '2.5 / 8 GB', name: empty ? '等待电脑连接' : long ? 'Luna-Desktop · 示例主显卡名称过长时限定显示区域' : 'Luna-Desktop · 主 GPU' },
   };
 }
 

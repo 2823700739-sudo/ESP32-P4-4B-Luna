@@ -11,6 +11,8 @@
 **/build-ble-b0/
 **/sdkconfig.ble_b1*
 **/build-ble-b1/
+**/sdkconfig.public_b1*
+**/build-public-b1/
 pc-agent/.venv-ble/
 pc-agent/.venv-test/
 
@@ -39,3 +41,8 @@ pc-agent/usb-soak-*.csv
 **/.vscode/settings.json
 Thumbs.db
 Desktop.ini
+
+# Private continuity and verification history; preserved locally, not published.
+/HANDOFF.md
+/docs/development/
+/.venv-flash/

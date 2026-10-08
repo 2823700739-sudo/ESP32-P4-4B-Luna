@@ -1,0 +1,57 @@
+{
+  "version": "2026.10.08-preview",
+  "product": "Luna B1 five-card desktop companion",
+  "board": "Waveshare ESP32-P4-WIFI6-Touch-LCD-4B",
+  "chip": "esp32p4",
+  "chip_revision_min": "1.0",
+  "chip_revision_max": "1.99",
+  "idf_version": "6.0.2",
+  "lvgl_version": "9.3.0",
+  "esp_hosted_version": "2.12.11",
+  "flash_settings": {
+    "flash_mode": "dio",
+    "flash_size": "32MB",
+    "flash_freq": "80m"
+  },
+  "cpu_mhz": 360,
+  "display": "720x720 / DOUBLE_DIRECT",
+  "wifi_credentials": "empty",
+  "timezone": "Asia/Shanghai (fixed UTC+8)",
+  "app_partition_size_bytes": 10485760,
+  "files": [
+    {
+      "file": "luna-panel.bin",
+      "offset": "0x20000",
+      "size_bytes": 9438240,
+      "sha256": "5d164e3b93688fc54592d4bae5b01150731806cf649737cad055ae714922a753"
+    },
+    {
+      "file": "bootloader.bin",
+      "offset": "0x2000",
+      "size_bytes": 24016,
+      "sha256": "c1f2f3c6112ed5485e97e9fa2e142d887a4f8f4f1f6b7e958b8a4282912cab8d"
+    },
+    {
+      "file": "partition-table.bin",
+      "offset": "0x10000",
+      "size_bytes": 3072,
+      "sha256": "8f15ba571a89873f9c8e580df81040bd3440485adad7d7c54052999d7455a49f"
+    }
+  ],
+  "excluded": [
+    "NVS",
+    "bonds",
+    "TF data",
+    "C6 firmware",
+    "private Wi-Fi configuration",
+    "ELF/map/build logs"
+  ],
+  "limitations": [
+    "No initial weather-location setup entry point",
+    "Public Wi-Fi credentials are empty; private network builds must remain private",
+    "Public binaries have not completed fresh-device or long-duration hardware acceptance"
+  ],
+  "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
+  "source_branch": "codex/usb-r2",
+  "source_tag": "v2026.10.08-preview"
+}

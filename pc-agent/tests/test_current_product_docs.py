@@ -8,8 +8,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class CurrentDocumentationTests(unittest.TestCase):
     def test_local_markdown_links_resolve(self):
-        files = list((ROOT / "docs").rglob("*.md"))
-        files += [ROOT / "README.md", ROOT / "HANDOFF.md", ROOT / "pc-agent/README.md",
+        # Private handoff/history stays on the maintainer's machine, outside the
+        # public checkout. Validate the documents that users actually receive.
+        files = [file for file in (ROOT / "docs").rglob("*.md")
+                 if "development" not in file.relative_to(ROOT / "docs").parts]
+        files += [ROOT / "README.md", ROOT / "README.en.md", ROOT / "pc-agent/README.md",
                   ROOT / "firmware/luna-panel/main/assets/README.md"]
         for file in files:
             for target in re.findall(r'\]\(([^)]+)\)', file.read_text(encoding="utf-8")):

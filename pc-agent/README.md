@@ -1,90 +1,37 @@
-# Luna Windows BLE companion
+# Luna Windows BLE Agent
 
-The active entry point is `luna_ble_link.py`. It uses paired, encrypted BLE named **Luna**; it never opens a COM port or listens on HTTP. Music metadata/control uses Windows GSMTC; volume/mute uses the system volume adapter. No album-cover stream is read.
+[Deployment guide](../docs/DEPLOYMENT.en.md) · [部署教程](../docs/DEPLOYMENT.md)
+
+`luna_ble_link.py` connects to paired, authenticated Luna over BLE. Windows GSMTC supplies music metadata and explicit playback controls; Core Audio handles system volume/mute. Background collectors supply CPU/GPU/RAM/VRAM, local Codex quota and the most recent foreground VS Code workspace title. The process opens no serial port or HTTP listener.
+
+## Install and run
+
+From the repository root:
 
 ```powershell
 py -3.10 -m venv pc-agent/.venv-ble
 .\pc-agent\.venv-ble\Scripts\python.exe -m pip install -r pc-agent/requirements-ble-music.txt
-.\pc-agent\start-ble-link.ps1 -Music
 ```
 
-For normal use, install the independent Windows-owned resident once:
+Pair Luna in Windows Bluetooth settings and confirm matching numbers on both devices, then:
 
 ```powershell
 .\pc-agent\manage-ble-resident.ps1 -Action Install
 .\pc-agent\manage-ble-resident.ps1 -Action Start
 .\pc-agent\manage-ble-resident.ps1 -Action Status
-# Intentional stop / removal:
-# .\pc-agent\manage-ble-resident.ps1 -Action Stop
-# .\pc-agent\manage-ble-resident.ps1 -Action Remove
 ```
 
-`Luna BLE Agent` runs as the current interactive user, without elevation or a stored password. Windows starts it at login, not under the development tool's process lifetime. Its resident restarts an unexpectedly exited worker with bounded 2–30 second backoff and fresh handshake; it never replays music requests. Task Scheduler also restarts a failed resident after one minute. The existing link mutex still permits only one active session. No COM ports or HTTP listeners are opened. The task has no runtime/idle/battery timeout and is separate from the retired USB task. Log files: ignored `ble-resident.log`, `ble-link.log`, and native traceback-only `ble-crash.log`.
+The resident runs as the current interactive user at login, without elevation or a saved password. A single-instance guard permits one BLE client. An exited worker restarts with bounded backoff and a new handshake, without replaying uncertain music commands.
 
-`-Action Status` shows both the scheduled task `State` and a `LinkState` derived
-from the latest link log event. `Offline` means the latest event was a failed
-connection attempt; `Connected` means a recent authenticated connection or
-health exchange; `Starting` means a new worker has started. `Stale` means the
-last such event is over 90 seconds old, and `Unknown` means no usable log is
-available. Task `Running` alone does not mean Luna is connected. This is a
-read-only log summary, not a live device probe.
-
-Once installed, `start-ble-link.ps1` delegates background starts to this task. A foreground diagnostic is still explicit and must not run against the same device simultaneously.
-
-For foreground logs, intentionally stop the resident first, run the diagnostic,
-then start the resident again after closing the foreground process:
+Task Running is separate from a connected device. Inspect LinkState and recent `pc-agent/ble-link.log` entries. Stop the resident before foreground diagnostics; close the foreground process and restore it afterward:
 
 ```powershell
 .\pc-agent\manage-ble-resident.ps1 -Action Stop
 .\pc-agent\start-ble-link.ps1 -Music -Foreground
-# After Ctrl+C ends the foreground session:
+# After Ctrl+C:
 .\pc-agent\manage-ble-resident.ps1 -Action Start
 ```
 
-The launcher rejects `-Foreground` while the resident task is running, before
-starting another BLE process. Stopping the resident for diagnostics also
-temporarily stops PC state and music synchronization.
+Weather belongs to the device, not this Agent. Optional quota uses read-only `account/rateLimits/read` on an existing local Codex App Server; it does not change login or request inference. Missing sources remain unknown. Workspace recognition uses the default VS Code title and does not transmit full paths or source files.
 
-Do not run two BLE clients against Luna simultaneously. The single-instance guard prevents duplicate background residents. Uncertain music actions are never replayed after a disconnect.
-
-Weather is obtained by the device over Wi-Fi, not by this PC process. `--music` now also starts independent cached dashboard collectors. The read-only `account/rateLimits/read` App Server call supplies Codex quota; windows are selected by actual durations (300/10080 minutes), never their array position. No inference requests, login changes, token copying, credit resets or thread-list scraping are used.
-
-Windows metrics are sampled every 2 seconds with GetSystemTimes, GlobalMemoryStatusEx, DXGI and language-neutral PDH. GPU uses the busiest engine on the largest dedicated-memory hardware adapter; VRAM is adapter-wide dedicated usage, not per-process totals. CPU/GPU temperatures stay unavailable without a supported sensor provider. No driver installation or administrator access is required. Only a recognized default foreground `Code.exe` workspace title provides the last active project name; customized/unidentified titles remain unavailable. Full paths and source files are not sent. Open the intended VS Code project and bring it to the foreground once to populate this field.
-
-Metric initialization retries with interruptible 2–30 second backoff. A failed GPU query is closed and reinitialized after a 30-second cooldown, including adapter re-enumeration; CPU/RAM/project sampling continues independently. Unsupported GPU providers remain unavailable, not zero. Failed PDH initialization releases its query, and repeated service starts do not create duplicate sampling threads.
-If collection succeeds but every formatted GPU array read fails, the same cooldown/rebuild path applies. A readable array (including an empty one) is preserved when another array fails, so partial GPU data does not cause unnecessary query rebuilding.
-If the whole PC metric sample fails three times in a row, the collector is closed and recreated with interruptible 2–30 second backoff. A single transient failure keeps the existing collector; the failed sample stays unavailable rather than appearing as zero. This recovery path has a simulated regression, but has not been exercised against a real Windows driver or sleep/wake failure, and does not establish hardware fault acceptance. The current recovery fixes were loaded into the resident on 2026-10-03; consult the current status for subsequent changes.
-
-BLE negotiates the `dashboard` feature, sends cached read-only snapshots at most every 2 seconds, and prioritizes music actions. Existing music-only firmware is compatible and doesn't receive unsupported dashboard messages. Firmware validates the entire snapshot atomically; disconnected/expired readings are visibly marked. This collector never opens COM ports or an HTTP listener.
-
-The old USB/HTTP entry points and login auto-start task have been retired. The task `Luna PC Agent` is disabled, not repurposed as BLE auto-start. Existing ignored local configuration/logs are preserved, not committed.
-
-The quota adapter caches only quota windows (no thread/project listing or old
-summary/reset strings). Its response queue is bounded and ignores unsolicited
-notifications. Media metadata requests time out after 2 seconds; timed-out queued
-actions are cancelled, but already submitted Windows operations cannot be undone.
-Only the six explicit BLE commands are allowed; no toggle/volume-step fallback.
-See [current documentation](../docs/README.md) for the active product and validation.
-
-Tests (no real playback actions):
-
-```powershell
-py -3.10 -m venv pc-agent/.venv-test
-.\pc-agent\.venv-test\Scripts\python.exe -m pip install -r pc-agent/requirements-test.txt
-.\pc-agent\.venv-test\Scripts\python.exe scripts/run-pc-agent-tests.py --hosted
-```
-
-The hosted lane runs the Windows/Python tests without requiring ESP-IDF or a C
-compiler. It includes mocked BLE and media tests; it does not connect to Luna
-or command real playback. To run the complete local suite, install native GCC
-and populate ESP-IDF managed components, then run the same script without
-`--hosted`. Native tests compile firmware C code and must not be counted as
-passed when these prerequisites are absent. Both lanes return a failing exit
-code if any selected test is skipped, and print its reason. The hosted lane's
-explicit native-test exclusions happen before execution and are not skips;
-install the missing prerequisites before retrying a failed full lane.
-The GitHub Actions workflow uses
-Windows Server 2025 for its hosted lane and runs the dependency-free preview
-model tests separately. The hosted lane mocks BLE and media calls; Windows
-Server CI cannot validate Bleak's supported Windows 11 desktop runtime,
-physical touch, BLE recovery, or a firmware build.
+Logs, virtual environments, credentials and private configuration are excluded from Git. See the deployment guide for hardware compatibility, setup, stopping/removal and troubleshooting.
