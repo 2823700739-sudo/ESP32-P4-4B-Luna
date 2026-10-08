@@ -4,6 +4,9 @@
 
 This guide targets **2026.10.08-preview**. The repository includes source and public binaries. The public image contains no Wi-Fi credentials or device NVS data. Clock, music, quota and PC metrics use BLE. Network weather requires a local build, and an initial weather-location setup entry point is not yet available.
 
+
+The license-material distribution is `2026.10.08-preview.1`; the embedded binary version remains `2026.10.08-preview`. Use the [complete source, binary and license ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip). Separate binary distributions must include [LICENSE](../LICENSE), [NOTICE](../NOTICE), [third-party notices](../THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](../LICENSES/) directory.
+
 ## 1. Requirements and compatibility
 
 - Waveshare ESP32-P4-WIFI6-Touch-LCD-4B, 720×720, P4 rev1.x, 32 MB Flash. Do not flash this image onto other boards, rev3.x or other displays.

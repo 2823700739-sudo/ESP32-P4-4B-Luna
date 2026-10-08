@@ -1,0 +1,519 @@
+{
+  "distribution_version": "2026.10.08-preview.1",
+  "note": "Verbatim upstream license texts, except files explicitly identified as extracted source comments. Resolved dependencies and build tools are not a claim that every optional component is linked or enabled.",
+  "licenses": [
+    {
+      "component": "espressif/button",
+      "version": "4.2.1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/button/versions/4.2.1",
+      "file": "LICENSES/components/espressif__button/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/cjson",
+      "version": "1.7.19~2",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/cjson/versions/1.7.19~2",
+      "file": "LICENSES/components/espressif__cjson/LICENSE",
+      "sha256": "a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c"
+    },
+    {
+      "component": "espressif/cmake_utilities",
+      "version": "0.5.3",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/cmake_utilities/versions/0.5.3",
+      "file": "LICENSES/components/espressif__cmake_utilities/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/eppp_link",
+      "version": "1.1.6",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/eppp_link/versions/1.1.6",
+      "file": "LICENSES/components/espressif__eppp_link/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_codec_dev",
+      "version": "1.5.11",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_codec_dev/versions/1.5.11",
+      "file": "LICENSES/components/espressif__esp_codec_dev/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_hosted",
+      "version": "2.12.11",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_hosted/versions/2.12.11",
+      "file": "LICENSES/components/espressif__esp_hosted/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_lcd_touch",
+      "version": "1.2.1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_lcd_touch/versions/1.2.1",
+      "file": "LICENSES/components/espressif__esp_lcd_touch/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_lcd_touch_gt911",
+      "version": "1.2.1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_lcd_touch_gt911/versions/1.2.1",
+      "file": "LICENSES/components/espressif__esp_lcd_touch_gt911/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_lv_decoder",
+      "version": "0.4.3",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_lv_decoder/versions/0.4.3",
+      "file": "LICENSES/components/espressif__esp_lv_decoder/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_lv_fs",
+      "version": "1.0.1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_lv_fs/versions/1.0.1",
+      "file": "LICENSES/components/espressif__esp_lv_fs/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_lvgl_adapter",
+      "version": "0.6.3",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_lvgl_adapter/versions/0.6.3",
+      "file": "LICENSES/components/espressif__esp_lvgl_adapter/LICENSE",
+      "sha256": "862f600b4c27954a54933f5c00fe4d92bae02bab216d795876ebd76aa6f5538d"
+    },
+    {
+      "component": "espressif/esp_mmap_assets",
+      "version": "2.0.1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_mmap_assets/versions/2.0.1",
+      "file": "LICENSES/components/espressif__esp_mmap_assets/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_new_jpeg",
+      "version": "1.0.2",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_new_jpeg/versions/1.0.2",
+      "file": "LICENSES/components/espressif__esp_new_jpeg/LICENSE",
+      "sha256": "0bf7f2018fffa1caff5ecbf10d79707b218eea4e26b8c705d744de4556552815"
+    },
+    {
+      "component": "espressif/esp_serial_slave_link",
+      "version": "1.1.2",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_serial_slave_link/versions/1.1.2",
+      "file": "LICENSES/components/espressif__esp_serial_slave_link/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/esp_wifi_remote",
+      "version": "1.6.3",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/esp_wifi_remote/versions/1.6.3",
+      "file": "LICENSES/components/espressif__esp_wifi_remote/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/freetype",
+      "version": "2.14.3~1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/freetype/versions/2.14.3~1",
+      "file": "LICENSES/components/espressif__freetype/LICENSE",
+      "sha256": "594cbe9628b6681596b8ade0ca01c79a39ed3c768da46ae35cddebac63cd6f6d"
+    },
+    {
+      "component": "espressif/freetype",
+      "version": "2.14.3~1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "freetype/LICENSE.TXT",
+      "upstream_url": "https://components.espressif.com/components/espressif/freetype/versions/2.14.3~1",
+      "file": "LICENSES/components/espressif__freetype/freetype/LICENSE.TXT",
+      "sha256": "bd36c8b474855fa294c2ec5c184544478ef3720aad37d65a6296a4f264fd2d3b"
+    },
+    {
+      "component": "espressif/freetype",
+      "version": "2.14.3~1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "freetype/docs/FTL.TXT",
+      "upstream_url": "https://components.espressif.com/components/espressif/freetype/versions/2.14.3~1",
+      "file": "LICENSES/components/espressif__freetype/freetype/docs/FTL.TXT",
+      "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f"
+    },
+    {
+      "component": "espressif/freetype",
+      "version": "2.14.3~1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "freetype/docs/GPLv2.TXT",
+      "upstream_url": "https://components.espressif.com/components/espressif/freetype/versions/2.14.3~1",
+      "file": "LICENSES/components/espressif__freetype/freetype/docs/GPLv2.TXT",
+      "sha256": "c4120c6752c910c299e3bd9cb3a46ff262c268303ca2069b61f92f10a5656c18"
+    },
+    {
+      "component": "espressif/knob",
+      "version": "1.1.0",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/espressif/knob/versions/1.1.0",
+      "file": "LICENSES/components/espressif__knob/license.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/libpng",
+      "version": "1.6.58~2",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/libpng/versions/1.6.58~2",
+      "file": "LICENSES/components/espressif__libpng/LICENSE",
+      "sha256": "bf5e22b9dce8464064ae17a48ea1133c3369ac9e1d80ef9e320e5219aa14ea9b"
+    },
+    {
+      "component": "espressif/usb",
+      "version": "1.5.0",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/usb/versions/1.5.0",
+      "file": "LICENSES/components/espressif__usb/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "espressif/wifi_remote_over_eppp",
+      "version": "0.3.3",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "src/eppp_init.c (opening copyright/SPDX comment only)",
+      "upstream_url": "https://components.espressif.com/components/espressif/wifi_remote_over_eppp/versions/0.3.3",
+      "file": "LICENSES/components/espressif__wifi_remote_over_eppp/runtime-source-header.txt",
+      "sha256": "cb8ef858e7fb33a63c24b3cdfa8faef288cbba9166d2241161e28195eacdd939"
+    },
+    {
+      "component": "espressif/zlib",
+      "version": "1.3.2~1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/espressif/zlib/versions/1.3.2~1",
+      "file": "LICENSES/components/espressif__zlib/LICENSE",
+      "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+    },
+    {
+      "component": "lvgl/lvgl",
+      "version": "9.3.0",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENCE.txt",
+      "upstream_url": "https://components.espressif.com/components/lvgl/lvgl/versions/9.3.0",
+      "file": "LICENSES/components/lvgl__lvgl/LICENCE.txt",
+      "sha256": "27a80bd36832ab42d35ad60c08b2b230a807a9bc0d58e94ec1531543dc49cbe8"
+    },
+    {
+      "component": "waveshare/esp32_p4_wifi6_touch_lcd_4b",
+      "version": "3.0.1",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://components.espressif.com/components/waveshare/esp32_p4_wifi6_touch_lcd_4b/versions/3.0.1",
+      "file": "LICENSES/components/waveshare__esp32_p4_wifi6_touch_lcd_4b/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "waveshare/esp_lcd_st7703",
+      "version": "2.0.0",
+      "category": "resolved-firmware-dependency",
+      "upstream_file": "license.txt",
+      "upstream_url": "https://components.espressif.com/components/waveshare/esp_lcd_st7703/versions/2.0.0",
+      "file": "LICENSES/components/waveshare__esp_lcd_st7703/license.txt",
+      "sha256": "a406579cd136771c705c521db86ca7d60a6f3de7c9b5460e6193a2df27861bde"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/LICENSE",
+      "file": "LICENSES/esp-idf/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/freertos/FreeRTOS-Kernel/LICENSE.md",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/freertos/FreeRTOS-Kernel/LICENSE.md",
+      "file": "LICENSES/esp-idf/components/freertos/FreeRTOS-Kernel/LICENSE.md",
+      "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/bt/host/nimble/nimble/LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/bt/host/nimble/nimble/LICENSE",
+      "file": "LICENSES/esp-idf/components/bt/host/nimble/nimble/LICENSE",
+      "sha256": "0deb15bc7df50b1d009c644b008f92e1062909e9521328d337c5fad3a5d4921c"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/bt/host/nimble/nimble/NOTICE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/bt/host/nimble/nimble/NOTICE",
+      "file": "LICENSES/esp-idf/components/bt/host/nimble/nimble/NOTICE",
+      "sha256": "b838c4733a5020cd8e2bafbe70842acd8c8dc7816012965b77d10c1f4c0727f6"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/mbedtls/mbedtls/LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/mbedtls/mbedtls/LICENSE",
+      "file": "LICENSES/esp-idf/components/mbedtls/mbedtls/LICENSE",
+      "sha256": "9b405ef4c89342f5eae1dd828882f931747f71001cfba7d114801039b52ad09b"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/mbedtls/mbedtls/tf-psa-crypto/LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/mbedtls/mbedtls/tf-psa-crypto/LICENSE",
+      "file": "LICENSES/esp-idf/components/mbedtls/mbedtls/tf-psa-crypto/LICENSE",
+      "sha256": "da8c58f05f135a9d15e9ffad4ecf854cfcc1f014c8abfd75ba05f62630ccc118"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/lwip/lwip/COPYING",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/lwip/lwip/COPYING",
+      "file": "LICENSES/esp-idf/components/lwip/lwip/COPYING",
+      "sha256": "ef4aac92e05e87cd1cdc140870ed52206ba03d4a7fe46c1e11d7ffa6c87d252b"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/http_parser/LICENSE.txt",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/http_parser/LICENSE.txt",
+      "file": "LICENSES/esp-idf/components/http_parser/LICENSE.txt",
+      "sha256": "3aced2d086d3f59cafb6589770c30c1e45a5bdf50c1d4375060b81a615db604c"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/console/linenoise/LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/console/linenoise/LICENSE",
+      "file": "LICENSES/esp-idf/components/console/linenoise/LICENSE",
+      "sha256": "efe1692aa5b869edaa0ac88f95eb0276c1125304ffc636a299db3ebbab47f62b"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/console/argtable3/LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/console/argtable3/LICENSE",
+      "file": "LICENSES/esp-idf/components/console/argtable3/LICENSE",
+      "sha256": "a97df648b7db77f9f6f5e1ef5fe44eb6b154ecb8ae26ad39c92ea44201cce45c"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/spiffs/spiffs/LICENSE",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/spiffs/spiffs/LICENSE",
+      "file": "LICENSES/esp-idf/components/spiffs/spiffs/LICENSE",
+      "sha256": "d19257540156a51ed50c2378e7159066415d8bbbe147779f8deb0d3e73f1b0a7"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/esp_libc/COPYING.picolibc",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/esp_libc/COPYING.picolibc",
+      "file": "LICENSES/esp-idf/components/esp_libc/COPYING.picolibc",
+      "sha256": "fa72ebf6e3c9b3d674f89da06648b0c17d3bcb1ce05ed5956cc102fba1e6964d"
+    },
+    {
+      "component": "ESP-IDF and bundled components",
+      "version": "6.0.2",
+      "category": "firmware-sdk",
+      "upstream_file": "components/esp_libc/COPYING.NEWLIB",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/esp_libc/COPYING.NEWLIB",
+      "file": "LICENSES/esp-idf/components/esp_libc/COPYING.NEWLIB",
+      "sha256": "0681089a556e93791da82718d68011ba452de245f7f59c3846936304756ac0c0"
+    },
+    {
+      "component": "FatFs",
+      "version": "R0.15 w/patch2 (ESP-IDF 6.0.2)",
+      "category": "firmware-sdk",
+      "upstream_file": "components/fatfs/src/ff.c (opening license comment only)",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/fatfs",
+      "file": "LICENSES/esp-idf/fatfs-source-header.txt",
+      "sha256": "b664a6eb43931d7945140536379c75b28fb4a5af3e08b5ddd26d30c6b4fa0e06"
+    },
+    {
+      "component": "Mozilla CA certificate data",
+      "version": "2.0",
+      "category": "firmware-certificate-data",
+      "upstream_file": "MPL 2.0 license text",
+      "upstream_url": "https://www.mozilla.org/media/MPL/2.0/index.txt",
+      "file": "LICENSES/certificate-bundle/MPL-2.0.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+    },
+    {
+      "component": "ESP-IDF public CA bundle source",
+      "version": "6.0.2 / Mozilla data 2025-12-02",
+      "category": "firmware-certificate-data",
+      "upstream_file": "components/mbedtls/esp_crt_bundle/cacrt_all.pem",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/mbedtls/esp_crt_bundle/cacrt_all.pem",
+      "file": "LICENSES/certificate-bundle/cacrt_all.pem",
+      "sha256": "f1407d974c5ed87d544bd931a278232e13925177e239fca370619aba63c757b4"
+    },
+    {
+      "component": "ESP-IDF public CA bundle source",
+      "version": "6.0.2 / Mozilla data 2025-12-02",
+      "category": "firmware-certificate-data",
+      "upstream_file": "components/mbedtls/esp_crt_bundle/cacrt_local.pem",
+      "upstream_url": "https://github.com/espressif/esp-idf/tree/v6.0.2/components/mbedtls/esp_crt_bundle/cacrt_local.pem",
+      "file": "LICENSES/certificate-bundle/cacrt_local.pem",
+      "sha256": "69ae34cd659bd2d3ebd03cd270ad515cb1c9331cf068e61553f4b948ee38c92c"
+    },
+    {
+      "component": "Espressif GCC runtime / C library",
+      "version": "esp-15.2.0_20251204",
+      "category": "firmware-toolchain-runtime",
+      "upstream_file": "share/licenses/gcc/COPYING3",
+      "upstream_url": "https://github.com/espressif/crosstool-NG/releases/tag/esp-15.2.0_20251204",
+      "file": "LICENSES/toolchain-runtime/gcc/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "component": "Espressif GCC runtime / C library",
+      "version": "esp-15.2.0_20251204",
+      "category": "firmware-toolchain-runtime",
+      "upstream_file": "share/licenses/gcc/COPYING.RUNTIME",
+      "upstream_url": "https://github.com/espressif/crosstool-NG/releases/tag/esp-15.2.0_20251204",
+      "file": "LICENSES/toolchain-runtime/gcc/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    },
+    {
+      "component": "Espressif GCC runtime / C library",
+      "version": "esp-15.2.0_20251204",
+      "category": "firmware-toolchain-runtime",
+      "upstream_file": "share/licenses/picolibc/COPYING.picolibc",
+      "upstream_url": "https://github.com/espressif/crosstool-NG/releases/tag/esp-15.2.0_20251204",
+      "file": "LICENSES/toolchain-runtime/picolibc/COPYING.picolibc",
+      "sha256": "1e427387b690483dad761268beb0f09a824ecba6132c4dfee78d1fb21a6e75b5"
+    },
+    {
+      "component": "Espressif GCC runtime / C library",
+      "version": "esp-15.2.0_20251204",
+      "category": "firmware-toolchain-runtime",
+      "upstream_file": "share/licenses/picolibc/COPYING.NEWLIB",
+      "upstream_url": "https://github.com/espressif/crosstool-NG/releases/tag/esp-15.2.0_20251204",
+      "file": "LICENSES/toolchain-runtime/picolibc/COPYING.NEWLIB",
+      "sha256": "fcfb5ec69b6ab52676dcc4dab7cf4338c8000ef97812dadd35b8592a640a8419"
+    },
+    {
+      "component": "bleak",
+      "version": "3.0.2",
+      "category": "windows-agent-dependency",
+      "upstream_file": "bleak-3.0.2.dist-info/licenses/LICENSE",
+      "upstream_url": "https://pypi.org/project/bleak/3.0.2/",
+      "file": "LICENSES/python/bleak/LICENSE",
+      "sha256": "c4029a2b63b3824ab68be841f414addbdde20cb79cdbe272fa80c0b2abe65374"
+    },
+    {
+      "component": "async-timeout",
+      "version": "5.0.1",
+      "category": "windows-agent-dependency",
+      "upstream_file": "async_timeout-5.0.1.dist-info/LICENSE",
+      "upstream_url": "https://pypi.org/project/async-timeout/5.0.1/",
+      "file": "LICENSES/python/async-timeout/LICENSE",
+      "sha256": "e18d7bb8f513e2c46bb585c94b585bd30720dd3ccb21ddb0786f72d16658f92c"
+    },
+    {
+      "component": "typing-extensions",
+      "version": "4.16.0",
+      "category": "windows-agent-dependency",
+      "upstream_file": "typing_extensions-4.16.0.dist-info/licenses/LICENSE",
+      "upstream_url": "https://pypi.org/project/typing-extensions/4.16.0/",
+      "file": "LICENSES/python/typing-extensions/LICENSE",
+      "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+    },
+    {
+      "component": "pyserial",
+      "version": "3.5",
+      "category": "development-only",
+      "upstream_file": "LICENSE.txt",
+      "upstream_url": "https://raw.githubusercontent.com/pyserial/pyserial/v3.5/LICENSE.txt",
+      "file": "LICENSES/python/pyserial/LICENSE.txt",
+      "sha256": "f91cb9813de6a5b142b8f7f2dede630b5134160aedaeaf55f4d6a7e2593ca3f3"
+    },
+    {
+      "component": "winrt-runtime and winrt-* bindings",
+      "version": "3.2.1",
+      "category": "windows-agent-dependency",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://raw.githubusercontent.com/pywinrt/pywinrt/v3.2.1/LICENSE",
+      "file": "LICENSES/python/pywinrt/LICENSE",
+      "sha256": "6e898069e8b3c6d8d23dc70ac7067cc2b7c9db14c36df873026758db82c0891d"
+    },
+    {
+      "component": "Files with explicit CC0-1.0 headers",
+      "version": "1.0",
+      "category": "explicit-source-license",
+      "upstream_file": "CC0 1.0 legal code",
+      "upstream_url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC0-1.0.txt",
+      "file": "LICENSES/CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+    },
+    {
+      "component": "Noto Sans CJK / derived Luna bitmap fonts",
+      "version": "OFL-1.1",
+      "category": "bundled-fonts",
+      "upstream_file": "firmware/luna-panel/main/assets/OFL-NotoSansCJK.txt",
+      "upstream_url": "https://github.com/notofonts/noto-cjk",
+      "file": "LICENSES/fonts/OFL-NotoSansCJK.txt",
+      "sha256": "b178a91254d50a5a11c04be5b50057e5c94b737f9f5f067f1184f4a319fddd40"
+    },
+    {
+      "component": "lv_font_conv",
+      "version": "1.5.3",
+      "category": "development-only",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://www.npmjs.com/package/lv_font_conv/v/1.5.3",
+      "file": "LICENSES/tools/lv_font_conv/LICENSE",
+      "sha256": "959add68a50f49e55cdb8c66c3c50112e3906a7a5210fb677e503f3ab281c018"
+    },
+    {
+      "component": "sharp",
+      "version": "0.35.5",
+      "category": "development-only",
+      "upstream_file": "LICENSE",
+      "upstream_url": "https://www.npmjs.com/package/sharp/v/0.35.5",
+      "file": "LICENSES/tools/sharp/LICENSE",
+      "sha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68"
+    }
+  ]
+}

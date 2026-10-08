@@ -6,7 +6,7 @@ Luna 是一个基于 ESP32-P4 的无线桌面伙伴。720×720 触屏上，五�
 
 Windows 通过加密认证的蓝牙 BLE 与 Luna 连接，设备 Wi-Fi 独立负责天气和备用校时。DC 常亮供电，待机时保持屏幕亮度。
 
-**2026.10.08 公开预览版**提供源代码、部署教程和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
+**2026.10.08-preview.1 公开预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
 
 ## 产品界面与功能
 
@@ -72,7 +72,7 @@ CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 
 
 [固件 app bin](firmware/releases/2026.10.08-preview/luna-panel.bin) · [bootloader bin](firmware/releases/2026.10.08-preview/bootloader.bin) · [分区表 bin](firmware/releases/2026.10.08-preview/partition-table.bin) · [校验值](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
 
-[下载本版完整源码与 bin ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.zip)。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆当前产品分支：
+[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆当前产品分支：
 
 ```powershell
 git clone --branch codex/usb-r2 https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
@@ -99,4 +99,4 @@ docs/images/                        产品界面图
 
 天气首次地点配置缺失，Wi-Fi 需本地构建配置，时区固定北京时间。Codex 额度源可能暂时不可用；自定义 VS Code 标题和不支持 GSMTC 的播放器可能无法识别。公开镜像是无凭据预览构建，尚未在全新设备上完成安装与长期运行验收。
 
-仓库整体许可证尚未选择，不宣称采用 MIT / Apache 等授权。Noto Sans CJK 字体附带 [SIL Open Font License 1.1](firmware/luna-panel/main/assets/OFL-NotoSansCJK.txt)，组件沿用各自许可；[固件素材说明](firmware/luna-panel/main/assets/README.md)与[像素猫来源](docs/design/preview/assets/README.md)保留转换和来源记录。
+Luna 自有代码与文档采用 [Apache License 2.0](LICENSE)，有明确其他许可头的文件沿用原许可。第三方组件与 Noto 派生字库保留各自授权，详见[中英第三方许可与致谢](THIRD_PARTY_NOTICES.md)、[版权通知](NOTICE)及[完整原文与版本清单](LICENSES/manifest.json)。[固件素材说明](firmware/luna-panel/main/assets/README.md)与[像素猫来源](docs/design/preview/assets/README.md)保留转换和来源记录。

@@ -1,0 +1,30 @@
+Luna - ESP32-P4 desktop companion
+Copyright 2026 2823700739-sudo and Luna contributors
+
+Luna-owned code and documentation are licensed under the Apache License,
+Version 2.0. See LICENSE. Files bearing explicit alternative license notices,
+third-party components and derived Noto font resources retain their own terms.
+See THIRD_PARTY_NOTICES.md and LICENSES/ for attribution and license texts.
+This notice does not modify any license or grant third-party trademark rights.
+
+Apache Mynewt NimBLE
+Copyright 2015-2022 The Apache Software Foundation
+Modifications Copyright 2017-2022 Espressif Systems (Shanghai) CO., LTD.
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+Portions of this software were developed at
+Runtime Inc, copyright 2015.
+
+Noto Sans CJK / derived Luna bitmap fonts
+Source font copyright: 2014-2021 Adobe (http://www.adobe.com/).
+Licensed under the SIL Open Font License, Version 1.1.
+
+Mozilla CA certificate data (snapshot 2025-12-02)
+Licensed under the Mozilla Public License, Version 2.0.
+Public source data and the license are in LICENSES/certificate-bundle/.
+
+FreeType (resolved optional dependency; not linked in the current public app)
+Portions of this software are copyright 1996-2026 The FreeType Project
+(https://freetype.org). All rights reserved.

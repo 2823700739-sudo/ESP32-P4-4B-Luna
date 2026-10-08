@@ -90,4 +90,4 @@ hello 协商能力与会话/启动身份。PC 请求串行、超时 8 秒；不�
 
 公开目录只包含 app、bootloader、分区表、相对路径清单与 SHA-256，不含 ELF、生成 sdkconfig、NVS、绑定、TF、运行日志或私人镜像。必要的测试源码与 CI 留在仓库；内部验证流水与交接文件不随公开版本提供。
 
-项目整体许可证尚未选择。字体 OFL、组件许可、[固件素材说明](../firmware/luna-panel/main/assets/README.md)和[像素猫来源](design/preview/assets/README.md)须保留。
+Luna 自有代码与文档采用 [Apache-2.0](../LICENSE)，明确标注 CC0 等其他许可的文件沿用原文。字体 OFL、组件原始许可与版权通知见[第三方说明](../THIRD_PARTY_NOTICES.md)、[NOTICE](../NOTICE)和[许可版本清单](../LICENSES/manifest.json)。保留[固件素材说明](../firmware/luna-panel/main/assets/README.md)与[像素猫来源](design/preview/assets/README.md)；修改依赖或发布新 bin 时须重新核对实际许可。

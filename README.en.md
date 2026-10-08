@@ -6,7 +6,7 @@ Luna is a wireless desktop companion built around ESP32-P4. Five swipeable cards
 
 Authenticated, encrypted BLE connects Luna to Windows. Device-owned Wi-Fi handles weather and backup time synchronization. The DC-powered display stays on, with unchanged brightness in standby.
 
-The **2026.10.08 public preview** includes source code, deployment instructions and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
+The **2026.10.08-preview.1 public preview** includes source code, deployment instructions, license materials and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
 
 ## Screens and features
 
@@ -72,11 +72,13 @@ The product focuses on Windows BLE and device Wi-Fi. There is no macOS/Linux Age
 
 [App binary](firmware/releases/2026.10.08-preview/luna-panel.bin) · [Bootloader](firmware/releases/2026.10.08-preview/bootloader.bin) · [Partition table](firmware/releases/2026.10.08-preview/partition-table.bin) · [Checksums](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
 
-[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning the current product branch:
+[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning the current product branch:
 
 ```powershell
 git clone --branch codex/usb-r2 https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
+
+Separate binary distributions must also include [LICENSE](LICENSE), [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](LICENSES/) directory.
 
 ## Source and documentation
 
@@ -99,4 +101,4 @@ This version excludes local credentials, runtime logs, virtual environments, too
 
 Initial weather location setup is missing, Wi-Fi uses local build configuration, and the timezone is fixed to UTC+8. The Codex quota source may temporarily fail. Customized VS Code titles and players without GSMTC support may be unavailable. These credential-free preview binaries have not completed first-install and long-duration acceptance on a fresh device.
 
-A repository-wide license has not been selected; the project does not claim MIT or Apache licensing. Noto Sans CJK includes [SIL Open Font License 1.1](firmware/luna-panel/main/assets/OFL-NotoSansCJK.txt), and dependencies retain their own licenses. [Firmware assets](firmware/luna-panel/main/assets/README.md) and [pixel-cat provenance](docs/design/preview/assets/README.md) document their sources and conversion.
+Luna-owned code and documentation use [Apache License 2.0](LICENSE); explicit alternative per-file notices remain in effect. Third-party dependencies and derived Noto fonts retain their own terms. See the bilingual [third-party notices](THIRD_PARTY_NOTICES.md), [NOTICE](NOTICE) and [complete texts/version manifest](LICENSES/manifest.json). [Firmware assets](firmware/luna-panel/main/assets/README.md) and [pixel-cat provenance](docs/design/preview/assets/README.md) document their sources and conversion.

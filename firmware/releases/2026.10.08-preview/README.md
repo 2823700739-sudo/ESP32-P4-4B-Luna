@@ -25,3 +25,7 @@ The Wi-Fi SSID/password are empty. Network weather needs a private build and an 
 完整源代码包含在[仓库](../../../README.md)中，依赖版本由组件锁文件与 PC requirements 清单管理。第三方资源和字体继续适用各自许可。
 
 [Repository source](../../../README.en.md) includes firmware, Agent, configuration defaults and build tools. Dependencies and fonts retain their own licenses.
+
+许可材料更新版 **2026.10.08-preview.1** 沿用本目录三份 bin，其内置应用版本仍为 `2026.10.08-preview`，大小和 SHA-256 不变。自有代码采用 Apache-2.0；单独分发 bin 时也须附带 [LICENSE](../../../LICENSE)、[NOTICE](../../../NOTICE)、[中英第三方许可说明](../../../THIRD_PARTY_NOTICES.md)和完整 [LICENSES/](../../../LICENSES/) 目录。推荐[完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip)。
+
+Distribution **2026.10.08-preview.1** adds license materials; all three binaries, embedded app version, sizes and SHA-256 values remain unchanged. Luna-owned code uses Apache-2.0. Separate binary distributions must include the license materials linked above; the complete ZIP includes them together.

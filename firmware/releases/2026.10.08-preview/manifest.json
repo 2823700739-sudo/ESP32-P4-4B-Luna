@@ -53,5 +53,14 @@
   ],
   "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
   "source_branch": "codex/usb-r2",
-  "source_tag": "v2026.10.08-preview"
+  "source_tag": "v2026.10.08-preview.1",
+  "distribution_version": "2026.10.08-preview.1",
+  "project_license": "Apache-2.0 (explicit per-file and third-party licenses retained)",
+  "license_materials": [
+    "../../../LICENSE",
+    "../../../NOTICE",
+    "../../../THIRD_PARTY_NOTICES.md",
+    "../../../LICENSES/"
+  ],
+  "binary_update": "License-material update only; binaries unchanged from v2026.10.08-preview"
 }

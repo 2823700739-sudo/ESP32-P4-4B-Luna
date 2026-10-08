@@ -4,6 +4,9 @@
 
 本教程对应 **2026.10.08-preview**。源代码与公开 bin 都在仓库中。公开镜像没有 Wi-Fi 名称、密码或设备 NVS 数据；时钟、音乐、额度和电脑状态通过 BLE 使用。联网天气需自行配置构建，且新设备的地点设置入口尚未提供。
 
+
+许可材料分发版为 `2026.10.08-preview.1`，bin 内置版本仍为 `2026.10.08-preview`。推荐下载[完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip)；单独分发 bin 时同时附带 [LICENSE](../LICENSE)、[NOTICE](../NOTICE)、[第三方说明](../THIRD_PARTY_NOTICES.md)与完整 [LICENSES/](../LICENSES/) 目录。
+
 ## 1. 准备与适用范围
 
 - Waveshare ESP32-P4-WIFI6-Touch-LCD-4B，720×720，P4 rev1.x，32 MB Flash；其他板型、rev3.x 和屏幕型号不要直接刷这个镜像。
