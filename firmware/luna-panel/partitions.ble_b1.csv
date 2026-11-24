@@ -1,0 +1,7 @@
+# B1 only: full Chinese fonts use the retired model gap, never the storage area.
+# NVS/PHY/app start/storage offset and size stay identical to partitions.csv.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     ,        0x6000,
+phy_init, data, phy,     ,        0x1000,
+factory,  app,  factory, 0x20000, 10M,
+storage,  data, spiffs,  0xA20000, 5M,

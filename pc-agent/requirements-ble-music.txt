@@ -1,0 +1,3 @@
+# Current Luna BLE music dependencies.
+-r requirements-ble.txt
+winrt-Windows.Media.Control==3.2.1
