@@ -31040,7 +31040,7 @@
         195039,
         195060
       ],
-      "sha256": "6cefd634bc98581e08222247cafc41788e6cdf592bc557a773bf30438a524e20"
+      "sha256": "e3164a61daa36eaf0accdf799497e7b5008375429aeb186701817687cb5e8da0"
     },
     "luna_cjk_28": {
       "size": 28,
@@ -62080,7 +62080,7 @@
         195039,
         195060
       ],
-      "sha256": "ce1f55ac064873fee6202973f1060fc563be35b8712db7a9e6f246955fcdece3"
+      "sha256": "8e3bc63a68da9a60cf65117c6f901c1db51838e202c7dbdd6d37f7beb9fb33da"
     },
     "luna_cjk_10": {
       "size": 10,
@@ -62327,7 +62327,7 @@
         21464,
         21270
       ],
-      "sha256": "4e33ceb72fc1419e2d083afac53cae2a824326328c6249d0bd48dd3c069b5c92"
+      "sha256": "e96f81cb96db66c9bf6eee52c5bfb56c9ae21853c06235858889a42f569ecd3f"
     },
     "luna_cjk_13": {
       "size": 13,
@@ -62574,7 +62574,7 @@
         21464,
         21270
       ],
-      "sha256": "48d623e651031be6790bde05a3d2f8b088f863d885f5f23d09b1e3328a45ad45"
+      "sha256": "0040d1250d7885076ad4cf3b15fe290df371a6d422b32495c1a2de9070d1b27c"
     },
     "luna_cjk_18": {
       "size": 18,
@@ -62821,7 +62821,7 @@
         21464,
         21270
       ],
-      "sha256": "87974c01498f4be8c69645b2f508565c0205db7d885f57a6db1286f5d788d1e0"
+      "sha256": "7c5cbc422748d73ffb87ea236a32bbc7d0f687f4e2c5a3cd400e86fea4df923b"
     },
     "luna_cjk_20": {
       "size": 20,
@@ -63068,7 +63068,7 @@
         21464,
         21270
       ],
-      "sha256": "d952388da4fa6f93fac7cb1dbce93b1d8cd3c0c5eba7768f48aa491685c47fe9"
+      "sha256": "63fc6b0cddf6286a537545457b85f289badf8bbd8babc58ebdce1e852dcde3fb"
     },
     "luna_digits_86": {
       "size": 86,
@@ -63089,7 +63089,7 @@
         58,
         45
       ],
-      "sha256": "acd6f89a3056316799d4aababe4dc47cddd908f020ec7fbb3ba3fa47f8cfebd5"
+      "sha256": "c63b644c48ff60cad301d90d0fc891d34e1183ac1e07002514bfce66f324a096"
     },
     "luna_digits_101": {
       "size": 101,
@@ -63110,7 +63110,7 @@
         58,
         45
       ],
-      "sha256": "ff5a368c88a67b316df81f5298390c2074eaa4acaf68fa04ca12cdfdb085bf18"
+      "sha256": "74c50fb7645f726673b52709d99fc485c00061eeb272fdc69d379b007a8e37a0"
     }
   },
   "images": {

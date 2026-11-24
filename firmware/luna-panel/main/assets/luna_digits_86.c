@@ -2,7 +2,7 @@
 /*******************************************************************************
  * Size: 86 px
  * Bpp: 4
- * Opts: --font NotoSansCJKsc-Regular.otf --range 45,48-58 --size 86 --bpp 4 --format lvgl --no-kerning --no-compress --lv-include lvgl.h --lv-font-name luna_digits_86 --output D:\Documents\ChatGPT\ESP32-P4-4B-Luna\firmware\luna-panel\main\assets\luna_digits_86.c
+ * Opts: --font NotoSansCJKsc-Regular.otf --range 45,48-58 --size 86 --bpp 4 --format lvgl --no-kerning --no-compress --lv-include lvgl.h --lv-font-name luna_digits_86 --output luna_digits_86.c
  ******************************************************************************/
 
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE

@@ -1,5 +1,5 @@
 {
-  "distribution_version": "2026.10.08-preview.1",
+  "distribution_version": "2026.11.24-preview",
   "note": "Verbatim upstream license texts, except files explicitly identified as extracted source comments. Resolved dependencies and build tools are not a claim that every optional component is linked or enabled.",
   "licenses": [
     {

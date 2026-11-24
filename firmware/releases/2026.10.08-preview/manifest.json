@@ -36,11 +36,18 @@
       "offset": "0x10000",
       "size_bytes": 3072,
       "sha256": "8f15ba571a89873f9c8e580df81040bd3440485adad7d7c54052999d7455a49f"
+    },
+    {
+      "file": "luna-first-install-0x0.bin",
+      "offset": "0x0",
+      "size_bytes": 9569312,
+      "sha256": "2c62bbebfe258cf26c047fc512c0882e68bd315bbd89face5577802745ab941c",
+      "install_mode": "first_install_only"
     }
   ],
   "excluded": [
-    "NVS",
-    "bonds",
+    "Device NVS contents (not copied; RAW padding clears target NVS)",
+    "Device bonds (not copied; RAW padding clears target bonds)",
     "TF data",
     "C6 firmware",
     "private Wi-Fi configuration",
@@ -49,12 +56,13 @@
   "limitations": [
     "No initial weather-location setup entry point",
     "Public Wi-Fi credentials are empty; private network builds must remain private",
-    "Public binaries have not completed fresh-device or long-duration hardware acceptance"
+    "Public binaries have not completed fresh-device or long-duration hardware acceptance",
+    "Merged RAW image overwrites NVS/bonds/weather cache; first installation only"
   ],
   "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
-  "source_branch": "codex/usb-r2",
-  "source_tag": "v2026.10.08-preview.1",
-  "distribution_version": "2026.10.08-preview.1",
+  "source_branch": "codex/merged-first-install",
+  "source_tag": "v2026.11.24-preview",
+  "distribution_version": "2026.11.24-preview",
   "project_license": "Apache-2.0 (explicit per-file and third-party licenses retained)",
   "license_materials": [
     "../../../LICENSE",
@@ -62,5 +70,37 @@
     "../../../THIRD_PARTY_NOTICES.md",
     "../../../LICENSES/"
   ],
-  "binary_update": "License-material update only; binaries unchanged from v2026.10.08-preview"
+  "binary_update": "Added merged first-install image; bootloader, partition table and application unchanged from v2026.10.08-preview",
+  "merged_image": {
+    "format": "raw",
+    "tool": "esptool 5.4.0",
+    "target_offset": "0x0",
+    "gap_fill": "0xFF",
+    "inputs": [
+      {
+        "file": "bootloader.bin",
+        "offset": "0x2000"
+      },
+      {
+        "file": "partition-table.bin",
+        "offset": "0x10000"
+      },
+      {
+        "file": "luna-panel.bin",
+        "offset": "0x20000"
+      }
+    ],
+    "write_end_exclusive": "0x920420",
+    "erase_end_exclusive": "0x921000",
+    "overwrites": [
+      "bootloader",
+      "partition table",
+      "NVS including BLE bonds/weather cache",
+      "phy_init",
+      "factory app"
+    ],
+    "storage_offset": "0xA20000",
+    "full_flash_padding": false,
+    "warning": "First installation only. RAW padding overwrites NVS; use app-only for existing devices."
+  }
 }

@@ -45,7 +45,9 @@ for(const [size,all] of [[16,true],[28,true],[10,false],[13,false],[18,false],[2
     '--no-kerning',...(!all?['--no-compress']:[]),'--lv-include','lvgl.h','--lv-font-name',name,'--output',output],{encoding:'utf8'});
   if(result.status!==0) throw Error(result.stderr || result.stdout || 'Font conversion failed');
   // Normalize source header paths, retain the generated bitmap/metrics verbatim.
-  let source=fs.readFileSync(output,'utf8').replaceAll(fontPath,'NotoSansCJKsc-Regular.otf');
+  let source=fs.readFileSync(output,'utf8')
+    .replaceAll(fontPath,'NotoSansCJKsc-Regular.otf')
+    .replaceAll(output,`${name}.c`);
   // Match preview's 1.5em line boxes without changing glyph baseline/bitmap.
   // Rare tall glyphs retain their full bitmap; the card's outer clip is unchanged.
   if(all) {

@@ -6,7 +6,7 @@ Luna 是一个基于 ESP32-P4 的无线桌面伙伴。720×720 触屏上，五�
 
 Windows 通过加密认证的蓝牙 BLE 与 Luna 连接，设备 Wi-Fi 独立负责天气和备用校时。DC 常亮供电，待机时保持屏幕亮度。
 
-**2026.10.08-preview.1 公开预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
+**2026.11.24-preview 公开预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
 
 ## 产品界面与功能
 
@@ -59,7 +59,7 @@ CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 
 | 硬件 | Waveshare ESP32-P4-WIFI6-Touch-LCD-4B，720×720；当前镜像面向 P4 rev1.x，沿用板载 C6 无线控制器 |
 | 供电 | DC 常亮；CPU 360 MHz，DOUBLE_DIRECT 双缓冲，待机不自动调暗 |
 | 固件 | C / FreeRTOS、ESP-IDF 6.0.2、LVGL 9.3.0、ESP-Hosted 2.12.11 |
-| 电脑 | Windows 11（build ≥ 22000）、蓝牙适配器、Python 3.10 |
+| 电脑 | Windows 11（build ≥ 22000）、蓝牙适配器、Python 3.11 |
 | 数据接口 | GSMTC、Core Audio、Win32、DXGI / PDH、本地 Codex App Server、Open-Meteo HTTPS |
 
 项目聚焦 Windows BLE 与设备 Wi-Fi；没有 macOS/Linux Agent、语音、麦克风、封面或 USB OTG 产品功能。TF 卡不承担当前 UI 素材加载。
@@ -67,16 +67,18 @@ CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 
 ## 下载与部署
 
 1. 阅读[部署教程](docs/DEPLOYMENT.md)，核对板型、芯片版本与设备现有分区。
-2. 下载[公开固件目录](firmware/releases/2026.10.08-preview/README.md)中的 app、bootloader、分区表 bin，并核对 SHA-256。
+2. 首次安装下载[合并固件](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin)，按教程从 `0x0` 烧录并核对 SHA-256；已有 Luna 使用 app-only 升级。
 3. 按教程选择“已有 Luna 升级”或“首次安装”，随后在 Windows 配对 Luna，安装 BLE Agent。
 
-[固件 app bin](firmware/releases/2026.10.08-preview/luna-panel.bin) · [bootloader bin](firmware/releases/2026.10.08-preview/bootloader.bin) · [分区表 bin](firmware/releases/2026.10.08-preview/partition-table.bin) · [校验值](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
+[首次安装合并 bin · 0x0](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin) · [固件 app bin](firmware/releases/2026.10.08-preview/luna-panel.bin) · [bootloader bin](firmware/releases/2026.10.08-preview/bootloader.bin) · [分区表 bin](firmware/releases/2026.10.08-preview/partition-table.bin) · [校验值](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
 
-[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆当前产品分支：
+[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.24-preview.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆本版：
 
 ```powershell
-git clone --branch codex/usb-r2 https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch v2026.11.24-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
+
+**合并包仅用于首次安装，会清除 NVS、配对和天气缓存；不能用于保留数据的升级。** 只包含 P4，要求板载 C6 已有兼容固件；P4 rev1.x / 32 MB 限制仍适用。
 
 ## 源代码与文档
 

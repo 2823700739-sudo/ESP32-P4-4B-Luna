@@ -88,6 +88,8 @@ hello 协商能力与会话/启动身份。PC 请求串行、超时 8 秒；不�
 
 [部署教程](DEPLOYMENT.md)区分无凭据公开构建与私人联网构建。PublicRelease 使用独立配置/构建目录、固定公开版本名和路径隐藏，不接触设备；Windows 长编译命令使用 Ninja response files。日常 B1 配置与设备状态不受影响。
 
-公开目录只包含 app、bootloader、分区表、相对路径清单与 SHA-256，不含 ELF、生成 sdkconfig、NVS、绑定、TF、运行日志或私人镜像。必要的测试源码与 CI 留在仓库；内部验证流水与交接文件不随公开版本提供。
+公开目录包含 app、bootloader、分区表、用于首次安装的 0x0 合并 bin、相对路径清单与 SHA-256，不含 ELF、生成 sdkconfig、NVS、绑定、TF、运行日志或私人镜像。必要的测试源码与 CI 留在仓库；内部验证流水与交接文件不随公开版本提供。
 
 Luna 自有代码与文档采用 [Apache-2.0](../LICENSE)，明确标注 CC0 等其他许可的文件沿用原文。字体 OFL、组件原始许可与版权通知见[第三方说明](../THIRD_PARTY_NOTICES.md)、[NOTICE](../NOTICE)和[许可版本清单](../LICENSES/manifest.json)。保留[固件素材说明](../firmware/luna-panel/main/assets/README.md)与[像素猫来源](design/preview/assets/README.md)；修改依赖或发布新 bin 时须重新核对实际许可。
+
+公开合并包由 `scripts/merge-public-firmware.py` 使用 esptool5.4.0 重现，校验输入 SHA、实际 B1 分区、合并段与 FF 填充；不重编 app，不填满 Flash，不接触设备。raw 间隙会覆盖 NVS/配对，正常升级只写 app。Windows 新装使用 x64 Python3.11，运行 `pc-agent/check-deployment.py` 只读检查依赖与模块导入，不能据此确认真实 BLE/C6 连接。

@@ -1,3 +1,7 @@
 # Preserve upstream license texts byte-for-byte, including original line endings.
 /LICENSE -text
 /LICENSES/** -text
+# Font manifests hash generated source bytes; retain them on Windows checkouts.
+/firmware/luna-panel/main/assets/*.c -text
+# A merged image starts with 0xFF padding; do not rely on NUL-based text detection.
+*.bin binary

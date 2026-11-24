@@ -1,6 +1,7 @@
 """Resource/partition checks; no board, media actions or serial port involved."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import unittest
 
@@ -16,6 +17,13 @@ class UiAssetTests(unittest.TestCase):
         for name,description in self.manifest['fonts'].items():
             with self.subTest(font=name):
                 self.assertEqual(hashlib.sha256((ASSETS/(name+'.c')).read_bytes()).hexdigest(),description['sha256'])
+
+    def test_generated_font_headers_have_no_machine_absolute_paths(self):
+        for name in self.manifest['fonts']:
+            source=(ASSETS/(name+'.c')).read_text(encoding='utf-8')
+            header=source.split('*/',1)[0]
+            with self.subTest(font=name):
+                self.assertIsNone(re.search(r'[A-Za-z]:[\\/]',header))
 
     def test_compression_uses_guarded_decoder_only_for_large_fonts(self):
         for name,description in self.manifest['fonts'].items():

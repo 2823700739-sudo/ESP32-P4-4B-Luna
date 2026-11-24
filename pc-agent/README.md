@@ -6,12 +6,16 @@
 
 ## Install and run
 
-From the repository root:
+Use Windows 11 x64 and 64-bit x64 Python 3.11. From the repository root:
 
 ```powershell
-py -3.10 -m venv pc-agent/.venv-ble
+py -3.11 -m venv pc-agent/.venv-ble
 .\pc-agent\.venv-ble\Scripts\python.exe -m pip install -r pc-agent/requirements-ble-music.txt
+.\pc-agent\.venv-ble\Scripts\python.exe -m pip check
+.\pc-agent\.venv-ble\Scripts\python.exe pc-agent/check-deployment.py
 ```
+
+The check verifies packages/imports without scanning BLE, pairing or controlling media. It does not prove hardware connectivity. If a script is blocked by execution policy, see the deployment guide for process-scoped invocation.
 
 Pair Luna in Windows Bluetooth settings and confirm matching numbers on both devices, then:
 

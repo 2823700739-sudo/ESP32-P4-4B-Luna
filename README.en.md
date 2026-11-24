@@ -6,7 +6,7 @@ Luna is a wireless desktop companion built around ESP32-P4. Five swipeable cards
 
 Authenticated, encrypted BLE connects Luna to Windows. Device-owned Wi-Fi handles weather and backup time synchronization. The DC-powered display stays on, with unchanged brightness in standby.
 
-The **2026.10.08-preview.1 public preview** includes source code, deployment instructions, license materials and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
+The **2026.11.24-preview public preview** includes source code, deployment instructions, license materials and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
 
 ## Screens and features
 
@@ -59,7 +59,7 @@ After three minutes without input, or a tap on the available blank area above th
 | Board | Waveshare ESP32-P4-WIFI6-Touch-LCD-4B, 720×720; this image targets P4 rev1.x and retains the existing onboard C6 controller |
 | Power and display | Always-on DC power; 360 MHz CPU, DOUBLE_DIRECT double buffering, no automatic standby dimming |
 | Firmware | C / FreeRTOS, ESP-IDF 6.0.2, LVGL 9.3.0, ESP-Hosted 2.12.11 |
-| PC | Windows 11 (build ≥ 22000), Bluetooth adapter, Python 3.10 |
+| PC | Windows 11 (build ≥ 22000), Bluetooth adapter, Python 3.11 |
 | Data interfaces | GSMTC, Core Audio, Win32, DXGI / PDH, local Codex App Server, Open-Meteo HTTPS |
 
 The product focuses on Windows BLE and device Wi-Fi. There is no macOS/Linux Agent, voice, microphone, album-cover or USB OTG product feature. UI assets are built in rather than loaded from TF storage.
@@ -67,18 +67,20 @@ The product focuses on Windows BLE and device Wi-Fi. There is no macOS/Linux Age
 ## Download and deploy
 
 1. Read the [deployment guide](docs/DEPLOYMENT.en.md) and check your board, silicon revision and existing partition layout.
-2. Download the app, bootloader and partition-table binaries from the [public firmware directory](firmware/releases/2026.10.08-preview/README.md), then verify SHA-256.
+2. For a first installation, download the [merged binary](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin), verify SHA-256 and flash it at `0x0` using the guide. Existing Luna devices use app-only upgrades.
 3. Follow the appropriate existing-device upgrade or first-install procedure, pair Luna in Windows, and install the BLE Agent.
 
-[App binary](firmware/releases/2026.10.08-preview/luna-panel.bin) · [Bootloader](firmware/releases/2026.10.08-preview/bootloader.bin) · [Partition table](firmware/releases/2026.10.08-preview/partition-table.bin) · [Checksums](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
+[First-install merged binary · 0x0](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin) · [App binary](firmware/releases/2026.10.08-preview/luna-panel.bin) · [Bootloader](firmware/releases/2026.10.08-preview/bootloader.bin) · [Partition table](firmware/releases/2026.10.08-preview/partition-table.bin) · [Checksums](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
 
-[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.10.08-preview.1.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning the current product branch:
+[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.24-preview.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning this version:
 
 ```powershell
-git clone --branch codex/usb-r2 https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch v2026.11.24-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
 
 Separate binary distributions must also include [LICENSE](LICENSE), [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](LICENSES/) directory.
+
+**The merged file is for first installation only and clears NVS, bonds and weather cache.** Use app-only for data-preserving upgrades. It contains only P4 firmware and requires an already compatible onboard C6; P4 rev1.x / 32 MB restrictions still apply.
 
 ## Source and documentation
 
