@@ -4,7 +4,7 @@
 
 This guide targets **2026.10.08-preview**. The repository includes source and public binaries. The public image contains no Wi-Fi credentials or device NVS data. Clock, music, quota and PC metrics use BLE. Network weather requires a local build, and an initial weather-location setup entry point is not yet available.
 
-The merged-image distribution is `2026.11.24-preview`; the embedded binary version remains `2026.10.08-preview`. Use the [complete source, binary and license ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.24-preview.zip). Separate binary distributions must include [LICENSE](../LICENSE), [NOTICE](../NOTICE), [third-party notices](../THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](../LICENSES/) directory.
+The merged-image distribution is `2026.11.25-preview`; the embedded binary version remains `2026.10.08-preview`. Use the [complete source, binary and license ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.25-preview.zip). Separate binary distributions must include [LICENSE](../LICENSE), [NOTICE](../NOTICE), [third-party notices](../THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](../LICENSES/) directory.
 
 ## 1. Requirements and compatibility
 
@@ -18,7 +18,7 @@ Get the Python 3.11 Windows installer (64-bit) from the [official downloads](htt
 Download and extract this version's full repository ZIP, or:
 
 ```powershell
-git clone --depth 1 --branch v2026.11.24-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch v2026.11.25-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 cd ESP32-P4-4B-Luna
 ```
 
@@ -76,7 +76,7 @@ This writes only the app, retaining the partition table, NVS, TF and C6 firmware
 
 ## 5. First installation: one binary at 0x0
 
-Use this only for a **first-install device whose existing data may be cleared**. Verify the board, P4 **rev1.x**, 32 MB Flash and B1 layout. The onboard C6 must already run compatible ESP-Hosted/HCI firmware. The merged file includes only the P4 bootloader, partition table and app; **it cannot provision a blank C6**. Stop if C6 is incompatible; do not flash arbitrary C6 images. Fresh-device hardware acceptance is still pending.
+Use this only for a **first-install device whose existing data may be cleared**. Verify the board, P4 **rev1.x**, 32 MB Flash and B1 layout. The onboard C6 must already run compatible ESP-Hosted/HCI firmware. The merged file includes only the P4 bootloader, partition table and app; **it cannot provision a blank C6**. Stop if C6 is incompatible; do not flash arbitrary C6 images. A merged first install, UI display, numeric pairing, BLE clock sync and real PC-data display have passed on one P4 rev1.3 / 32 MB board using its existing C6. Other C6 firmware combinations and long-duration operation remain unverified.
 
 **RAW gaps contain `0xFF`. Writing the merged file at `0x0` clears NVS at `0x11000–0x16FFF`, including BLE bonds, weather location and cache; it also overwrites phy_init. Existing devices that must retain data must use section 4's app-only upgrade.** Gap sectors are erased even without `erase-flash`; see [esptool RAW format](https://docs.espressif.com/projects/esptool/en/latest/esp32p4/esptool/basic-commands.html#raw-output-format).
 
@@ -93,6 +93,8 @@ After checking SHA-256, select only this file at `0x0` (`0x00` is equivalent):
   --flash-mode keep --flash-freq keep --flash-size keep `
   0x0 firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin
 ```
+
+At the default 115200 baud rate, compressed transfer may still take around ten minutes; retain power while progress continues. With a stable serial link, add `--baud 460800` after `--port COMx` for faster transfer; the spare board passed writing and verification at that rate.
 
 DIO / 80 MHz / 32 MB settings are already embedded. No local merge or ESP-IDF installation is needed. An existing P4-compatible graphical download tool can likewise select just this file at `0x0`; disable whole-chip erase and do not use the app offset `0x20000`. The raw file begins with padding, so do not rely on automatic first-header checks to validate every embedded image's silicon revision. Verify hardware before writing.
 
@@ -126,7 +128,7 @@ py -3.11 -m venv pc-agent/.venv-ble
 The check must report `Agent prerequisites OK`; correct versions/dependencies before starting the resident. It does not scan Bluetooth, pair or control media. Enable Bluetooth in Windows; a disabled adapter or denied scanning access still prevents connectivity.
 
 1. Add **Luna** in Windows Bluetooth settings.
-2. Compare the numbers on Windows and Luna, and approve both only if they match.
+2. Compare the numbers on Windows and Luna, and approve both only if they match. **Windows may now show Paired or temporarily Not connected. Pairing establishes trust; the Agent in the next step maintains the connection. Do not repeatedly delete bonds solely because the device is not yet connected.**
 3. Install and start the current-user login resident:
 
 ```powershell
@@ -205,6 +207,7 @@ An existing NVS weather location is retained. **A new device currently has no lo
 | --- | --- |
 | No COM port | Check the data cable, download interface and Windows Device Manager; use the actual detected port |
 | Chip or layout mismatch | Stop; verify P4 rev1.x and the B1 10 MiB layout, without force or whole-chip erase |
+| Windows says Paired, not connected | Continue section 6 Install / Start, then check LinkState=Connected, clock and metrics. Pairing alone is not a persistent connection |
 | Running task, offline cards | Check LinkState and recent ble-link.log, device power/advertising, Bluetooth and pairing; avoid concurrent clients |
 | Pairing mismatch or old bond | Reject mismatched numbers; use only the explicit on-screen bond-recovery action when required, never erase all NVS |
 | Weather location unset | Initial location setup is not implemented; an Agent change or new service does not supply this missing entry point |

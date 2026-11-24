@@ -6,7 +6,7 @@ Luna 是一个基于 ESP32-P4 的无线桌面伙伴。720×720 触屏上，五�
 
 Windows 通过加密认证的蓝牙 BLE 与 Luna 连接，设备 Wi-Fi 独立负责天气和备用校时。DC 常亮供电，待机时保持屏幕亮度。
 
-**2026.11.24-preview 公开预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
+**2026.11.25-preview 公开预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
 
 ## 产品界面与功能
 
@@ -72,10 +72,10 @@ CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 
 
 [首次安装合并 bin · 0x0](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin) · [固件 app bin](firmware/releases/2026.10.08-preview/luna-panel.bin) · [bootloader bin](firmware/releases/2026.10.08-preview/bootloader.bin) · [分区表 bin](firmware/releases/2026.10.08-preview/partition-table.bin) · [校验值](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
 
-[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.24-preview.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆本版：
+[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.25-preview.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆本版：
 
 ```powershell
-git clone --depth 1 --branch v2026.11.24-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch v2026.11.25-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
 
 **合并包仅用于首次安装，会清除 NVS、配对和天气缓存；不能用于保留数据的升级。** 只包含 P4，要求板载 C6 已有兼容固件；P4 rev1.x / 32 MB 限制仍适用。
@@ -99,6 +99,6 @@ docs/images/                        产品界面图
 
 ## 当前限制与许可
 
-天气首次地点配置缺失，Wi-Fi 需本地构建配置，时区固定北京时间。Codex 额度源可能暂时不可用；自定义 VS Code 标题和不支持 GSMTC 的播放器可能无法识别。公开镜像是无凭据预览构建，尚未在全新设备上完成安装与长期运行验收。
+天气首次地点配置缺失，Wi-Fi 需本地构建配置，时区固定北京时间。Codex 额度源可能暂时不可用；自定义 VS Code 标题和不支持 GSMTC 的播放器可能无法识别。公开镜像是无凭据预览构建，已在一块 P4 rev1.3 / 32 MB 设备上跑通 `0x0` 首装、画面、数字配对、BLE 校时与真实电脑数据显示；使用设备已有 C6，未验证其他 C6 固件组合、天气首次配置与长期运行。
 
 Luna 自有代码与文档采用 [Apache License 2.0](LICENSE)，有明确其他许可头的文件沿用原许可。第三方组件与 Noto 派生字库保留各自授权，详见[中英第三方许可与致谢](THIRD_PARTY_NOTICES.md)、[版权通知](NOTICE)及[完整原文与版本清单](LICENSES/manifest.json)。[固件素材说明](firmware/luna-panel/main/assets/README.md)与[像素猫来源](docs/design/preview/assets/README.md)保留转换和来源记录。

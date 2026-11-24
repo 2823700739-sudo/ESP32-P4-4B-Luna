@@ -4,7 +4,7 @@
 
 本教程对应 **2026.10.08-preview**。源代码与公开 bin 都在仓库中。公开镜像没有 Wi-Fi 名称、密码或设备 NVS 数据；时钟、音乐、额度和电脑状态通过 BLE 使用。联网天气需自行配置构建，且新设备的地点设置入口尚未提供。
 
-合并固件分发版为 `2026.11.24-preview`，bin 内置版本仍为 `2026.10.08-preview`。推荐下载[完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.24-preview.zip)；单独分发 bin 时同时附带 [LICENSE](../LICENSE)、[NOTICE](../NOTICE)、[第三方说明](../THIRD_PARTY_NOTICES.md)与完整 [LICENSES/](../LICENSES/) 目录。
+合并固件分发版为 `2026.11.25-preview`，bin 内置版本仍为 `2026.10.08-preview`。推荐下载[完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.25-preview.zip)；单独分发 bin 时同时附带 [LICENSE](../LICENSE)、[NOTICE](../NOTICE)、[第三方说明](../THIRD_PARTY_NOTICES.md)与完整 [LICENSES/](../LICENSES/) 目录。
 
 ## 1. 准备与适用范围
 
@@ -18,7 +18,7 @@ Python 可从 [Python 官方 Windows 下载页](https://www.python.org/downloads
 先下载本版完整仓库 ZIP 并解压，或：
 
 ```powershell
-git clone --depth 1 --branch v2026.11.24-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch v2026.11.25-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 cd ESP32-P4-4B-Luna
 ```
 
@@ -76,7 +76,7 @@ py -3.11 -m venv .venv-flash
 
 ## 5. 首次安装：单个 bin 从 0x0 烧录
 
-本节只适用于**可清空的首次安装设备**。先核对板型、P4 **rev1.x**、32 MB Flash、B1 分区，以及板载 C6 已有兼容当前 ESP-Hosted / HCI 的固件。合并包只包含 P4 bootloader、分区表和 app，**不能初始化空白 C6**；C6 不兼容时停止，不随机刷写其他 C6 镜像。全新设备安装尚待实机验收。
+本节只适用于**可清空的首次安装设备**。先核对板型、P4 **rev1.x**、32 MB Flash、B1 分区，以及板载 C6 已有兼容当前 ESP-Hosted / HCI 的固件。合并包只包含 P4 bootloader、分区表和 app，**不能初始化空白 C6**；C6 不兼容时停止，不随机刷写其他 C6 镜像。已在一块 P4 rev1.3 / 32 MB 设备上完成合并首装、显示、数字配对、BLE 校时和真实电脑数据显示确认；使用设备原有 C6，其他 C6 固件组合与长期运行仍未验证。
 
 **合并 raw bin 的间隙填充为 `0xFF`，从 `0x0` 写入会清除 `0x11000–0x16FFF` 的 NVS，包括已有 BLE 配对、天气地点和缓存；也覆盖 phy_init。已有 Luna 要保留这些数据，请使用第 4 节 app-only，不能使用合并包。** 即使不执行 `erase-flash`，这些间隙仍会被擦写，详见 [esptool RAW 格式说明](https://docs.espressif.com/projects/esptool/en/latest/esp32p4/esptool/basic-commands.html#raw-output-format)。
 
@@ -93,6 +93,8 @@ py -3.11 -m venv .venv-flash
   --flash-mode keep --flash-freq keep --flash-size keep `
   0x0 firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin
 ```
+
+默认 115200 速率下，压缩数据传输仍可能需要约十分钟；进度正常时不要断电。需要加快且串口稳定时，可在 `--port COMx` 后添加 `--baud 460800`，本次备用板已用该速率完成写入及校验。
 
 文件已内置正确的 DIO / 80 MHz / 32 MB 参数。不需要在本地合并或安装 ESP-IDF。若使用已有的兼容 P4 下载工具，同样只勾选该文件、填 `0x0`；不要勾选整片擦除、不要改为 app 地址 `0x20000`。合并 raw 文件开头是填充字节，不能依赖工具从首字节自动校验所有内嵌镜像的芯片版本，所以必须先核对上述硬件条件。
 
@@ -126,7 +128,7 @@ py -3.11 -m venv pc-agent/.venv-ble
 上述检查应显示 `Agent prerequisites OK`；失败时先修复版本/依赖，不要反复启动常驻。检查不会扫描蓝牙、配对或操控媒体。Windows 设置中需开启蓝牙；关闭蓝牙扫描权限/禁用适配器时检查通过也不能建立连接。
 
 1. 在 Windows 蓝牙设置添加 **Luna**。
-2. 核对 Windows 与 Luna 屏幕上的数字完全相同，分别确认。数字不匹配就拒绝。
+2. 核对 Windows 与 Luna 屏幕上的数字完全相同，分别确认。数字不匹配就拒绝。**此时 Windows 显示“已配对”或暂时“未连接”可以是正常状态：配对只建立信任，持续连接由下一步 Agent 建立；不要仅因“未连接”就反复删除绑定。**
 3. 安装当前用户登录常驻并启动：
 
 ```powershell
@@ -205,6 +207,7 @@ idf.py -B build-ble-b1 -D SDKCONFIG=sdkconfig.ble_b1 menuconfig
 | --- | --- |
 | 找不到 COM | 核对数据线、板载下载接口与 Windows 设备管理器；端口按本机实际识别，不使用历史编号 |
 | 芯片/分区不匹配 | 停止刷写，确认 P4 rev1.x 与 B1 10 MiB 布局，不用 force 或整片擦除 |
+| Windows 已配对，但暂未连接 | 继续第 6 节 Install / Start 常驻，再检查 LinkState=Connected、时钟与电脑数据；配对状态本身不是持续连接 |
 | 任务 Running，卡片仍离线 | 查看 LinkState 和近期 ble-link.log；检查设备供电/广播、Windows 蓝牙与配对，避免并行客户端 |
 | 配对数字或旧绑定问题 | 拒绝不匹配数字；需要恢复时只按屏幕明确的绑定恢复操作处理，不清空整个 NVS |
 | 天气“尚未设置地点” | 空白设备的配置入口尚未提供；不是修改 Agent 或安装服务能解决的配置项 |

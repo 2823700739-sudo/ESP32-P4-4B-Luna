@@ -56,13 +56,13 @@
   "limitations": [
     "No initial weather-location setup entry point",
     "Public Wi-Fi credentials are empty; private network builds must remain private",
-    "Public binaries have not completed fresh-device or long-duration hardware acceptance",
+    "Core merged first install verified on one P4 rev1.3 / 32MB board; other C6 combinations and long-duration operation unverified",
     "Merged RAW image overwrites NVS/bonds/weather cache; first installation only"
   ],
   "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
   "source_branch": "codex/merged-first-install",
-  "source_tag": "v2026.11.24-preview",
-  "distribution_version": "2026.11.24-preview",
+  "source_tag": "v2026.11.25-preview",
+  "distribution_version": "2026.11.25-preview",
   "project_license": "Apache-2.0 (explicit per-file and third-party licenses retained)",
   "license_materials": [
     "../../../LICENSE",
@@ -102,5 +102,23 @@
     "storage_offset": "0xA20000",
     "full_flash_padding": false,
     "warning": "First installation only. RAW padding overwrites NVS; use app-only for existing devices."
+  },
+  "hardware_validation": {
+    "date": "2026-11-25",
+    "p4_revision": "1.3",
+    "flash_size": "32MB",
+    "c6": "Existing firmware retained; version RPC unavailable, legacy HCI BLE path used",
+    "merged_write_verified": true,
+    "display_user_confirmed": true,
+    "numeric_pairing_and_authenticated_ble": true,
+    "ble_time_sync": true,
+    "real_pc_snapshots_accepted": true,
+    "clock_and_pc_display_user_confirmed": true,
+    "existing_resident_restored_connected": true,
+    "tested_python": "3.11.2 isolated runtime environment",
+    "wifi_weather": "not validated; no initial weather location setup",
+    "media_control_actions_tested": false,
+    "long_duration_tested": false,
+    "clean_windows_task_registration_tested": false
   }
 }

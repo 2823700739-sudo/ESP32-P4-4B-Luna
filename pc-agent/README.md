@@ -25,6 +25,8 @@ Pair Luna in Windows Bluetooth settings and confirm matching numbers on both dev
 .\pc-agent\manage-ble-resident.ps1 -Action Status
 ```
 
+Windows may show Paired / Not connected before the Agent starts; pairing establishes trust, while the running Agent maintains the BLE session. Check LinkState and clock/metrics after Start.
+
 The resident runs as the current interactive user at login, without elevation or a saved password. A single-instance guard permits one BLE client. An exited worker restarts with bounded backoff and a new handshake, without replaying uncertain music commands.
 
 Task Running is separate from a connected device. Inspect LinkState and recent `pc-agent/ble-link.log` entries. Stop the resident before foreground diagnostics; close the foreground process and restore it afterward:
