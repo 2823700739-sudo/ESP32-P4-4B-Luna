@@ -76,20 +76,21 @@
     "this_candidate_tested": true,
     "p4_app_flash_verified": true,
     "p4_boot_observed": true,
-    "ap_started": false,
-    "phone_connected": false,
+    "ap_started": true,
+    "phone_connected": true,
     "first_wifi_setup": false,
-    "wifi_scan": false,
+    "wifi_scan": true,
     "weather_https": false,
     "existing_nvs_network_restore": true,
     "ntp_synced": false,
     "reboot_restore": false,
     "weather_last_observed_errors": [],
-    "user_reported_wifi_working": true
+    "user_reported_wifi_working": true,
+    "http_page_opened": true
   },
   "source_revision_base": "ec0fe7b7823ba923927ee1635822afde9e04790c",
   "source_worktree_changes": true,
-  "status": "feature-branch preview; author confirmed Wi-Fi working; detailed weather/reboot acceptance remains open",
+  "status": "feature-branch preview; author confirmed phone page access and Wi-Fi scanning; detailed weather/reboot acceptance remains open",
   "setup_protocol": [
     "phone HTTP setup on temporary AP",
     "weather_configure (optional BLE fallback)",
@@ -111,7 +112,7 @@
   "socket_gate_fix": {
     "ipv4_and_ipv4_mapped_ap_address": true,
     "native_ipv6_and_lan_still_rejected": true,
-    "phone_verification_pending": true
+    "phone_verification_pending": false
   },
   "merged_image": {
     "format": "raw",
@@ -148,7 +149,13 @@
   "user_confirmation": {
     "date": "2026-11-26",
     "report": "刚刚我实测 WiFi 可以了",
-    "scope": "Wi-Fi reported working by the author after the phone-http update. Individual scan, weather-location save, new merged install and power-cycle checks were not separately specified."
+    "scope": "Author confirmed Wi-Fi working, then explicitly confirmed the phone page opens and discovers nearby Wi-Fi networks. Station trial/connection steps, weather-location save, fresh weather, new merged installation and power-cycle recovery were not separately specified.",
+    "follow_up_report": "网页能打开，也能扫描到 Wi-Fi",
+    "confirmed_scope": [
+      "phone joined setup AP",
+      "phone HTTP page opened",
+      "nearby Wi-Fi networks discovered"
+    ]
   },
   "verification_convention": "False in hardware_validation means not confirmed in the recorded observation; not evidence that the feature is unavailable."
 }
