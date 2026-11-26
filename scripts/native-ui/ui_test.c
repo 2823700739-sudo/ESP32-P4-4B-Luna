@@ -11,6 +11,13 @@ static int64_t test_us=1000000;
 static unsigned action_count;
 static bool test_power_idle;
 static unsigned dashboard_reads,music_reads,weather_reads;
+static luna_setup_ap_state_t test_ap;
+bool luna_setup_ap_snapshot(luna_setup_ap_state_t *out){*out=test_ap;return true;}
+void luna_setup_ap_request(bool open){
+    memset(&test_ap,0,sizeof(test_ap));test_ap.active=open;
+    if(open){strcpy(test_ap.ssid,"Luna-Setup-EXAMPLE");test_ap.remaining_seconds=600;}
+}
+void luna_weather_config_clear(void *data,unsigned length){memset(data,0,length);}
 esp_err_t luna_power_set_idle(bool value){test_power_idle=value;return ESP_OK;}
 static lv_indev_state_t input_state=LV_INDEV_STATE_RELEASED;
 static lv_point_t input_point;
@@ -269,5 +276,23 @@ int main(int argc,char **argv)
     assert(lv_obj_get_style_transform_scale_x(cards[2],0)==256);
     assert(lv_obj_get_style_transform_scale_y(cards[2],0)==256);
     puts("PASS card transition uses translation only, no full-card alpha/scale layer");
+    unsigned setup_actions=action_count;
+    choose_card(2,0);advance(300);click(560,521);
+    assert(test_ap.active&&!lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
+    assert(!strcmp(lv_label_get_text(setup_name),"Luna-Setup-EXAMPLE"));
+    assert(strstr(lv_label_get_text(setup_access),"请保持连接"));
+    const uint32_t setup_glyphs[]={0x624b,0x673a,0x70ed,0x5bc6,0x7801,0x6d4f,0x89c8,0x95ed,0x9690,0x85cf,0x5206,0x949f,0x4f59};
+    for(unsigned i=0;i<sizeof(setup_glyphs)/sizeof(setup_glyphs[0]);i++){
+        lv_font_glyph_dsc_t glyph;assert(lv_font_get_glyph_dsc(&luna_cjk_20,&glyph,setup_glyphs[i],0));
+    }
+    lv_obj_update_layout(root);
+    lv_area_t panel_bounds,access_bounds;lv_obj_get_coords(setup_panel,&panel_bounds);lv_obj_get_coords(setup_access,&access_bounds);
+    assert(access_bounds.x1>=panel_bounds.x1&&access_bounds.x2<=panel_bounds.x2);
+    save("phone-setup");click(208,539);
+    assert(test_ap.active&&lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
+    click(560,521);assert(!lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
+    click(487,539);assert(!test_ap.active&&lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
+    assert(!lv_label_get_text(setup_access)[0]&&action_count==setup_actions);
+    puts("PASS phone setup physical button, Chinese open-network guidance bounds, hide/reopen/close, no media action");
     lv_obj_update_layout(root);puts("Native UI assertions passed; rendered five cards, volume and manual/automatic clock");return 0;
 }

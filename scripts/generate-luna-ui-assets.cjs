@@ -7,6 +7,7 @@ const {spawnSync} = require('node:child_process');
 const sharp = require('sharp');
 const repo = path.resolve(__dirname, '..');
 const dest = path.join(repo, 'firmware/luna-panel/main/assets');
+const staticOnly=process.argv.includes('--static-fonts-only');
 const tool = path.join(repo, '.tools/lv-font-conv/node_modules/lv_font_conv');
 const opentype = require(path.join(tool, 'node_modules/opentype.js'));
 const fontPath = path.join(repo, '.tools/lv-font-conv/NotoSansCJKsc-Regular.otf');
@@ -34,8 +35,11 @@ const ui = fs.readFileSync(path.join(repo,'firmware/luna-panel/main/luna_preview
   fs.readFileSync(path.join(repo,'firmware/luna-panel/main/luna_weather_parse.c'),'utf8');
 const small = [...ui].filter(c=>c.codePointAt(0)>127).map(c=>c.codePointAt(0));
 const ascii = Array.from({length:95},(_,i)=>32+i);
-const declarations=[];const manifest={fontSourceSha256:expectedFont,converter:'lv_font_conv@1.5.3',fonts:{},images:{}};
+const declarations=[];const manifest=staticOnly?JSON.parse(fs.readFileSync(path.join(dest,'manifest.json'),'utf8')):
+  {fontSourceSha256:expectedFont,converter:'lv_font_conv@1.5.3',fonts:{},images:{}};
+if(staticOnly && (manifest.fontSourceSha256!==expectedFont || manifest.converter!=='lv_font_conv@1.5.3'))throw Error('Existing font manifest differs');
 for(const [size,all] of [[16,true],[28,true],[10,false],[13,false],[18,false],[20,false],[86,false],[101,false]]) {
+  if(staticOnly && (all || size>80))continue;
   const name=size>80?`luna_digits_${size}`:`luna_cjk_${size}`;
   const glyphs=size>80?[...'0123456789:-'].map(c=>c.codePointAt(0)):all ? full : [...new Set([...ascii, ...small])].filter(c=>cmap.includes(c));
   console.log(`Generating ${name}: ${glyphs.length} glyphs`,true);
@@ -79,6 +83,10 @@ async function rgba(name,input,w,h) {
   image(name,w,h,data,'LV_COLOR_FORMAT_ARGB8888',w*4);
 }
 async function main() {
+  if(staticOnly){
+    fs.writeFileSync(path.join(dest,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+    console.log('Updated static label fonts only; complete Han fonts, digits and artwork retained');return;
+  }
   const html=fs.readFileSync(path.join(repo,'docs/design/preview/index.html'),'utf8');
   const symbols=[...html.matchAll(/<symbol id="i-([a-z-]+)" viewBox="0 0 24 24">([\s\S]*?)<\/symbol>/g)];
   for(const [,name,body] of symbols) {

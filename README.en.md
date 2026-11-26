@@ -1,12 +1,14 @@
 # Luna · A desktop companion under the stars
 
+The **codex/phone-wifi-setup** branch provides the **2026.11.26-phone-http phone-setup preview**. Connect a phone to Luna's open hotspot, scan/select a 2.4 GHz network, enter its password and set a weather location. Clock/weather run independently; the Windows Agent supplies Codex, PC/project data and media controls. See the [phone setup guide](docs/PHONE-SETUP.en.md).
+
 [中文](README.md) · **English**
 
 Luna is a wireless desktop companion built around ESP32-P4. Five swipeable cards on a 720×720 touchscreen bring together time, music, weather, Codex quota and PC metrics. A starfield and an interactive pixel cat add a little companionship to your desk.
 
 Authenticated, encrypted BLE connects Luna to Windows. Device-owned Wi-Fi handles weather and backup time synchronization. The DC-powered display stays on, with unchanged brightness in standby.
 
-The **2026.11.25-preview public preview** includes source code, deployment instructions, license materials and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
+The **2026.11.26-phone-http phone-setup preview** includes source code, deployment instructions, license materials and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
 
 ## Screens and features
 
@@ -30,7 +32,7 @@ The right-side volume button opens a vertical slider with mute at the top. Tap o
 
 ### Weather · Fetched by the device
 
-The device retrieves weather over Wi-Fi and HTTPS and retains a local cache. The Windows Agent does not forward weather. **The public binary has no Wi-Fi credentials, and an initial location setup entry point is not yet available.** Devices with an existing saved location require a locally configured build for networking. A blank device cannot currently enable weather directly. This illustration shows demo weather.
+The device retrieves weather over Wi-Fi/HTTPS and retains a local cache; Windows does not forward it. **Public binaries contain no personal Wi-Fi credentials.** After flashing, connect a phone to the device hotspot, scan for networks, enter the password and select a city or enter explicit coordinates before saving. This illustration shows demo weather.
 
 <img src="docs/images/weather.png" width="360" alt="Luna weather card showing demo conditions and measurements">
 
@@ -67,15 +69,15 @@ The product focuses on Windows BLE and device Wi-Fi. There is no macOS/Linux Age
 ## Download and deploy
 
 1. Read the [deployment guide](docs/DEPLOYMENT.en.md) and check your board, silicon revision and existing partition layout.
-2. For a first installation, download the [merged binary](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin), verify SHA-256 and flash it at `0x0` using the guide. Existing Luna devices use app-only upgrades.
-3. Follow the appropriate existing-device upgrade or first-install procedure, pair Luna in Windows, and install the BLE Agent.
+2. For a first installation, download the [merged binary](firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin), verify SHA-256 and flash it at `0x0` using the guide. Existing Luna devices use app-only upgrades.
+3. Connect a phone to Luna's setup hotspot and open `http://192.168.4.1` to scan/connect Wi-Fi and set the weather location. For PC features, pair Luna in Windows, install Python 3.11 x64 and run **Start-Luna.cmd**.
 
-[First-install merged binary · 0x0](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin) · [App binary](firmware/releases/2026.10.08-preview/luna-panel.bin) · [Bootloader](firmware/releases/2026.10.08-preview/bootloader.bin) · [Partition table](firmware/releases/2026.10.08-preview/partition-table.bin) · [Checksums](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
+[First-install merged binary · 0x0](firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin) · [App binary](firmware/releases/2026.11.26-phone-http/luna-panel.bin) · [Bootloader](firmware/releases/2026.11.26-phone-http/bootloader.bin) · [Partition table](firmware/releases/2026.11.26-phone-http/partition-table.bin) · [Checksums](firmware/releases/2026.11.26-phone-http/SHA256SUMS.txt)
 
-[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.25-preview.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning this version:
+[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/codex/phone-wifi-setup.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning this version:
 
 ```powershell
-git clone --depth 1 --branch v2026.11.25-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch codex/phone-wifi-setup https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
 
 Separate binary distributions must also include [LICENSE](LICENSE), [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](LICENSES/) directory.
@@ -86,7 +88,7 @@ Separate binary distributions must also include [LICENSE](LICENSE), [NOTICE](NOT
 
 ```text
 firmware/luna-panel/                 ESP-IDF firmware and built-in assets
-firmware/releases/2026.10.08-preview/ Credential-free binaries and manifest
+firmware/releases/2026.11.26-phone-http/ Credential-free binaries and manifest
 pc-agent/                           Windows BLE Agent
 scripts/                            Build, preview and maintenance tools
 docs/design/preview/                Existing interactive website preview
@@ -101,6 +103,6 @@ This version excludes local credentials, runtime logs, virtual environments, too
 
 ## Current limitations and licensing
 
-Initial weather location setup is missing, Wi-Fi uses local build configuration, and the timezone is fixed to UTC+8. The Codex quota source may temporarily fail. Customized VS Code titles and players without GSMTC support may be unavailable. On one P4 rev1.3 / 32 MB board, the credential-free preview passed a 0x0 first install, UI display, numeric pairing, BLE time sync and real PC-data display using its existing C6. Other C6 firmware combinations, initial weather setup and long-duration operation remain unverified.
+The timezone is fixed to UTC+8. Weather needs working 2.4 GHz Wi-Fi, DNS/NTP and Open-Meteo HTTPS access. The Codex quota source may be unavailable; customized VS Code titles or players without GSMTC may be unsupported. The author confirmed Wi-Fi working on this build. Weather-location save/power-cycle recovery, other C6 combinations and long-duration operation have not been separately confirmed; see the [firmware manifest](firmware/releases/2026.11.26-phone-http/manifest.json).
 
 Luna-owned code and documentation use [Apache License 2.0](LICENSE); explicit alternative per-file notices remain in effect. Third-party dependencies and derived Noto fonts retain their own terms. See the bilingual [third-party notices](THIRD_PARTY_NOTICES.md), [NOTICE](NOTICE) and [complete texts/version manifest](LICENSES/manifest.json). [Firmware assets](firmware/luna-panel/main/assets/README.md) and [pixel-cat provenance](docs/design/preview/assets/README.md) document their sources and conversion.

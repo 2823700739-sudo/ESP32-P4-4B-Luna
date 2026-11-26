@@ -78,7 +78,7 @@ hello 协商能力与会话/启动身份。PC 请求串行、超时 8 秒；不�
 
 ## 天气、时间与显示
 
-天气通过 esp_http_client + TLS 根证书包访问 Open-Meteo HTTPS，NVS 保存地点与快照。`luna_weather_set_location()` 尚无用户配置入口；无历史地点的设备等待配置。Wi-Fi 凭据当前为本地构建配置，公开镜像为空。
+天气通过 esp_http_client + TLS 根证书包访问 Open-Meteo HTTPS，NVS 保存地点与快照。新 `2026.11.26-phone-http` 候选由 `luna_setup_portal.c` / `web/setup.html` 提供手机设置：短时无密码热点、AP侧本地HTTP、本地异步扫描/选择 Wi-Fi、试连网络、设备 HTTPS 城市查询和单一版本 NVS 配置提交。`luna_setup_request.c` 校验平面JSON、Host/Origin/会话token；热点无线切换与持久化仍由 `luna_ble_wifi.c` 单一后台worker执行。试连不保存，关闭/超时恢复上次提交配置；保存后设备独立联网，Windows不转发天气。扫描基于 [ESP-IDF 6.0.2 Wi-Fi API](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/network/esp_wifi.html)，通过受相同 AP/Host/Origin/token 保护的 POST/GET /api/scan，由原worker异步执行；12秒设备超时、5秒请求冷却、最多32原始/16去重结果；释放驱动列表，连接/保存与扫描互斥，失败保留手填，不为扫描主动断开既有STA。认证BLE向导保留为可选兼容入口，正常Start不再问天气。旧在线标签无这些入口；实际候选硬件结果须查manifest，不能从源码推断通过。
 
 时间策略统一写系统时钟，BLE 优先；网络就绪且未收到 BLE 时间或距上次超过 120 秒，备用 NTP 才可更新。时区固定 CST-8，NTP 周期一小时。
 
@@ -93,3 +93,5 @@ hello 协商能力与会话/启动身份。PC 请求串行、超时 8 秒；不�
 Luna 自有代码与文档采用 [Apache-2.0](../LICENSE)，明确标注 CC0 等其他许可的文件沿用原文。字体 OFL、组件原始许可与版权通知见[第三方说明](../THIRD_PARTY_NOTICES.md)、[NOTICE](../NOTICE)和[许可版本清单](../LICENSES/manifest.json)。保留[固件素材说明](../firmware/luna-panel/main/assets/README.md)与[像素猫来源](design/preview/assets/README.md)；修改依赖或发布新 bin 时须重新核对实际许可。
 
 公开合并包由 `scripts/merge-public-firmware.py` 使用 esptool5.4.0 重现，校验输入 SHA、实际 B1 分区、合并段与 FF 填充；不重编 app，不填满 Flash，不接触设备。raw 间隙会覆盖 NVS/配对，正常升级只写 app。Windows 新装使用 x64 Python3.11，运行 `pc-agent/check-deployment.py` 只读检查依赖与模块导入，不能据此确认真实 BLE/C6 连接。
+
+手机网页入口由 `luna_setup_socket.c` 校验本地目的地址；使用 sockaddr_storage 同时识别 192.168.4.1 IPv4 与 ::ffff:192.168.4.1 映射地址。IDF6.0.2启用IPv6时HTTP服务监听双栈，不能仅用sockaddr_in，否则会拒绝合法手机请求；家庭LAN/原生IPv6目的地址仍拒绝，Host/Origin/token限制不变。`test_setup_socket_c.py` 通过操作系统地址fixture复现旧拒绝并验证新策略，不代表手机实机验收。

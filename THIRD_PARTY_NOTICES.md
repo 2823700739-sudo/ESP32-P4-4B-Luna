@@ -69,6 +69,10 @@ Windows、Codex 和 Open-Meteo 是集成的系统/服务，不是此仓库重新
 
 Windows, Codex and Open-Meteo are integrated systems/services, not open-source code relicensed by this repository. Their own terms apply, including Open-Meteo's data attribution requirements.
 
+首次天气向导的城市搜索使用 [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api)，地点数据来自 [GeoNames](https://www.geonames.org/)。这些数据与服务不因项目 Apache-2.0 而改变许可，参见 [Open-Meteo terms](https://open-meteo.com/en/terms)。
+
+The setup wizard searches cities using Open-Meteo Geocoding, with location data from GeoNames. Service/data terms and attribution remain separate from Luna's code license.
+
 ## 分发 / Redistribution
 
 推荐下载本版完整源码 ZIP，它包含源代码、bin 和全部许可文件。仅下载或转发 bin 时，也应同时附带根目录 `LICENSE`、`NOTICE`、本文件和完整 `LICENSES/`，保留字体 OFL、原始版权与条件。修改或重新构建后需重新核对实际版本、启用组件及其通知；不能直接照搬本版清单。

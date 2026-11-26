@@ -1,12 +1,14 @@
 # Luna · 繁星与像素猫的桌面伙伴
 
+本分支 **codex/phone-wifi-setup** 提供 **2026.11.26-phone-http 手机配网预览版**：手机连接 Luna 无密码热点，扫描并选择 2.4 GHz Wi-Fi、输入密码，再设置天气地点。时钟与天气独立运行；Windows 脚本用于 Codex、电脑状态、工程与媒体控制。见[手机设置教程](docs/PHONE-SETUP.md)。
+
 **中文** · [English](README.en.md)
 
 Luna 是一个基于 ESP32-P4 的无线桌面伙伴。720×720 触屏上，五张横滑卡片呈现时间、音乐、天气、Codex 额度和电脑状态；繁星背景与可互动的像素猫，让桌面信息多一点陪伴感。
 
 Windows 通过加密认证的蓝牙 BLE 与 Luna 连接，设备 Wi-Fi 独立负责天气和备用校时。DC 常亮供电，待机时保持屏幕亮度。
 
-**2026.11.25-preview 公开预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
+**2026.11.26-phone-http 手机配网预览版**提供源代码、部署教程、开源许可材料和无个人 Wi-Fi 凭据的 bin。所有界面图均由仓库中原有网站预览生成，使用示例数据，非实机照片；设备界面当前为中文，英文文档不代表设备已有语言切换功能。
 
 ## 产品界面与功能
 
@@ -30,7 +32,7 @@ Windows 通过加密认证的蓝牙 BLE 与 Luna 连接，设备 Wi-Fi 独立负
 
 ### 天气 · 由设备独立获取
 
-天气由设备通过 Wi-Fi / HTTPS 获取，并保留本地缓存，不由 Windows Agent 转发。**公开 bin 不包含 Wi-Fi 凭据；当前首次地点配置入口尚未提供。** 已有地点的设备仍需自行配置 Wi-Fi 并构建，空白设备的联网天气暂不可直接启用。下图展示预览中的示例天气。
+天气由设备通过 Wi-Fi / HTTPS 获取，并保留本地缓存，不由 Windows Agent 转发。**公开 bin 不包含个人 Wi-Fi 凭据**；烧录后用手机连接设备热点，在网页扫描网络、输入密码，选择城市或手填经纬度并保存。下图展示预览中的示例天气。
 
 <img src="docs/images/weather.png" width="360" alt="Luna 天气卡片，示例天气和详细指标">
 
@@ -67,15 +69,15 @@ CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 
 ## 下载与部署
 
 1. 阅读[部署教程](docs/DEPLOYMENT.md)，核对板型、芯片版本与设备现有分区。
-2. 首次安装下载[合并固件](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin)，按教程从 `0x0` 烧录并核对 SHA-256；已有 Luna 使用 app-only 升级。
-3. 按教程选择“已有 Luna 升级”或“首次安装”，随后在 Windows 配对 Luna，安装 BLE Agent。
+2. 首次安装下载[合并固件](firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin)，按教程从 `0x0` 烧录并核对 SHA-256；已有 Luna 使用 app-only 升级。
+3. 手机连接 Luna 设置热点，打开 `http://192.168.4.1`，扫描 Wi-Fi、连接并设置天气地点。需要电脑相关功能时，再在 Windows 配对 Luna、安装 Python 3.11 x64 并运行 **Start-Luna.cmd**。
 
-[首次安装合并 bin · 0x0](firmware/releases/2026.10.08-preview/luna-first-install-0x0.bin) · [固件 app bin](firmware/releases/2026.10.08-preview/luna-panel.bin) · [bootloader bin](firmware/releases/2026.10.08-preview/bootloader.bin) · [分区表 bin](firmware/releases/2026.10.08-preview/partition-table.bin) · [校验值](firmware/releases/2026.10.08-preview/SHA256SUMS.txt)
+[首次安装合并 bin · 0x0](firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin) · [固件 app bin](firmware/releases/2026.11.26-phone-http/luna-panel.bin) · [bootloader bin](firmware/releases/2026.11.26-phone-http/bootloader.bin) · [分区表 bin](firmware/releases/2026.11.26-phone-http/partition-table.bin) · [校验值](firmware/releases/2026.11.26-phone-http/SHA256SUMS.txt)
 
-[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/tags/v2026.11.25-preview.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆本版：
+[下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/codex/phone-wifi-setup.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆本版：
 
 ```powershell
-git clone --depth 1 --branch v2026.11.25-preview https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch codex/phone-wifi-setup https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
 
 **合并包仅用于首次安装，会清除 NVS、配对和天气缓存；不能用于保留数据的升级。** 只包含 P4，要求板载 C6 已有兼容固件；P4 rev1.x / 32 MB 限制仍适用。
@@ -84,7 +86,7 @@ git clone --depth 1 --branch v2026.11.25-preview https://github.com/2823700739-s
 
 ```text
 firmware/luna-panel/                 ESP-IDF 固件和内置资源
-firmware/releases/2026.10.08-preview/ 公开无凭据 bin、清单与校验值
+firmware/releases/2026.11.26-phone-http/ 公开无凭据 bin、清单与校验值
 pc-agent/                           Windows BLE Agent
 scripts/                            构建、预览与维护工具
 docs/design/preview/                原有网站交互预览
@@ -99,6 +101,6 @@ docs/images/                        产品界面图
 
 ## 当前限制与许可
 
-天气首次地点配置缺失，Wi-Fi 需本地构建配置，时区固定北京时间。Codex 额度源可能暂时不可用；自定义 VS Code 标题和不支持 GSMTC 的播放器可能无法识别。公开镜像是无凭据预览构建，已在一块 P4 rev1.3 / 32 MB 设备上跑通 `0x0` 首装、画面、数字配对、BLE 校时与真实电脑数据显示；使用设备已有 C6，未验证其他 C6 固件组合、天气首次配置与长期运行。
+时区固定北京时间；天气联网需要可用的 2.4 GHz Wi-Fi、DNS/NTP 与 Open-Meteo HTTPS。Codex 额度源可能暂时不可用，自定义 VS Code 标题和不支持 GSMTC 的播放器可能无法识别。作者已确认本版 Wi-Fi 实测可用；天气地点保存/断电重载、其他 C6 固件组合与长期运行尚未分别确认，具体范围见[固件清单](firmware/releases/2026.11.26-phone-http/manifest.json)。
 
 Luna 自有代码与文档采用 [Apache License 2.0](LICENSE)，有明确其他许可头的文件沿用原许可。第三方组件与 Noto 派生字库保留各自授权，详见[中英第三方许可与致谢](THIRD_PARTY_NOTICES.md)、[版权通知](NOTICE)及[完整原文与版本清单](LICENSES/manifest.json)。[固件素材说明](firmware/luna-panel/main/assets/README.md)与[像素猫来源](docs/design/preview/assets/README.md)保留转换和来源记录。

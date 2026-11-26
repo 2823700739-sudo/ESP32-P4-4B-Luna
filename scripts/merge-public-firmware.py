@@ -115,9 +115,10 @@ def merge(directory=RELEASE, check=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Verify existing output without esptool or writes')
+    parser.add_argument('--directory', type=Path, default=RELEASE, help='Explicit release directory with audited manifest and three inputs')
     args = parser.parse_args()
     try:
-        merge(check=args.check)
+        merge(directory=args.directory, check=args.check)
     except (ValueError, OSError, KeyError, StopIteration, importlib.metadata.PackageNotFoundError) as error:
         parser.exit(1, f'Public merge rejected: {error}\n')
 

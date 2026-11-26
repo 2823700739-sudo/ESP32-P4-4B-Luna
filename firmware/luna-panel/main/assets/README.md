@@ -40,6 +40,11 @@ to be pixel-identical to Windows rendering.
 `manifest.json` records character coverage and output hashes. Generated C files
 are checked in; ordinary firmware builds do not need the generator or source OTF.
 
+When only static UI labels change, `node scripts/generate-luna-ui-assets.cjs --static-fonts-only`
+refreshes the 10/13/18/20 px subsets and their manifest entries, preserving complete
+16/28 px fonts, digit fonts and image bytes. Verify new labels with the native UI
+glyph assertions and rendered snapshots before rebuilding/flashing.
+
 Full fonts make B1 larger than 6 MiB. Its isolated partition table allocates
 10 MiB to the app using only the retired speech-model gap. NVS and storage/TF
 locations are unchanged; do not erase flash to install this profile.

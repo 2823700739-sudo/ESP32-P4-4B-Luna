@@ -30,7 +30,7 @@ if(LUNA_PUBLIC_RELEASE)
         message(FATAL_ERROR "Public release requires the B1 product")
     endif()
     list(APPEND SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults.public")
-    set(PROJECT_VER "2026.10.08-preview")
+set(PROJECT_VER "2026.11.26-phone-http")
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

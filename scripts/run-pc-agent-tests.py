@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "pc-agent" / "tests"
 # These compile real C sources; several also need ignored ESP-IDF managed components.
 NATIVE_MODULES = {
+    "test_setup_request_c",
+    "test_setup_socket_c",
+    "test_weather_config_c",
+    "test_weather_storage_c",
     "test_ble_advertising_recovery",
     "test_luna_ble_music_c",
     "test_luna_dashboard_c",

@@ -36,9 +36,7 @@
 #include "luna_time.h"
 #include "luna_power.h"
 #endif
-#ifdef CONFIG_LUNA_BLE_B0_WIFI_TEST
 #include "luna_ble_wifi.h"
-#endif
 
 #ifndef CONFIG_LUNA_BLE_B0
 #error "B0 application requires the isolated BLE sdkconfig profile"
@@ -120,7 +118,11 @@ static bool shallow_json(const uint8_t *data, size_t len)
     for (size_t i = 0; i < len; i++) {
         uint8_t c = data[i];
         if (quoted) {
-            if (escaped) escaped = false;
+            if (escaped) {
+                /* cJSON strings are NUL-terminated: forbid decoded embedded NUL. */
+                if (c == 'u' && i + 4 < len && !memcmp(data+i+1,"0000",4)) return false;
+                escaped = false;
+            }
             else if (c == '\\') escaped = true;
             else if (c == '"') quoted = false;
         } else if (c == '"') quoted = true;
@@ -166,7 +168,7 @@ static int handle_message(uint16_t conn, uint16_t id, const uint8_t *data, size_
         }
         atomic_store(&session_payload, payload_limit);
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
-        const char *mode = "b1-music", *features = "\"diagnostic\",\"mtu_payload\",\"music\",\"time_status\",\"dashboard\"";
+        const char *mode = "b1-music", *features = "\"diagnostic\",\"mtu_payload\",\"music\",\"time_status\",\"dashboard\",\"weather_setup\"";
 #else
         const char *mode = "b0-diagnostic", *features = "\"diagnostic\",\"mtu_payload\"";
 #endif
@@ -218,6 +220,27 @@ static int handle_message(uint16_t conn, uint16_t id, const uint8_t *data, size_
             result = queue_reply(conn, id, reply);
         }
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
+        else if (!strcmp(type->valuestring,"weather_configure")) {
+            luna_weather_config_t config={0};
+            bool accepted=luna_weather_config_parse(root,&config) && luna_ble_wifi_configure(&config);
+            luna_weather_config_clear(&config,sizeof(config));
+            snprintf(reply,sizeof(reply),"{\"v\":1,\"type\":\"weather_configure_result\",\"session\":\"%s\",\"boot_id\":\"%s\",\"accepted\":%s}",
+                     session,boot_id,accepted?"true":"false");
+            result=queue_reply(conn,id,reply);
+        }
+        else if (!strcmp(type->valuestring,"weather_status")) {
+            luna_ble_wifi_setup_status_t setup={0};
+            bool ready=luna_ble_wifi_setup_status(&setup);
+            luna_ble_wifi_status_t wifi=luna_ble_wifi_status();
+            const char *states[]={"idle","saving","saved","apply_failed","save_failed"};
+            const char *state=ready && setup.state<5?states[setup.state]:"unavailable";
+            snprintf(reply,sizeof(reply),"{\"v\":1,\"type\":\"weather_status\",\"session\":\"%s\",\"boot_id\":\"%s\","
+                     "\"setup_id\":\"%s\",\"state\":\"%s\",\"saved\":%s,\"error\":%d,\"wifi_configured\":%s,"
+                     "\"wifi_online\":%s,\"weather_configured\":%s,\"weather_available\":%s,\"weather_cached\":%s}",
+                     session,boot_id,setup.setup_id,state,setup.saved?"true":"false",setup.error,setup.wifi_configured?"true":"false",
+                     wifi.online?"true":"false",wifi.configured?"true":"false",wifi.available?"true":"false",wifi.cached?"true":"false");
+            result=queue_reply(conn,id,reply);
+        }
         else if (!strcmp(type->valuestring, "time_status")) {
             luna_time_policy_t time_state = luna_time_snapshot();
             struct timeval tv; gettimeofday(&tv, NULL);
@@ -239,6 +262,11 @@ static int handle_message(uint16_t conn, uint16_t id, const uint8_t *data, size_
 #endif
     }
 done:
+    /* Do not retain provisioning strings in the parser heap. Never log/echo them. */
+    for (const char **key=(const char *[]){"ssid","password",NULL};*key;key++) {
+        cJSON *secret=cJSON_GetObjectItemCaseSensitive(root,*key);
+        if (cJSON_IsString(secret)) luna_weather_config_clear(secret->valuestring,strlen(secret->valuestring));
+    }
     cJSON_Delete(root);
     return result;
 }
@@ -259,7 +287,9 @@ static int access_rx(uint16_t conn, uint16_t attr, struct ble_gatt_access_ctxt *
     // B0 only: monotonically increasing IDs, no replay even after unknown outcomes.
     if (id <= last_request_id) return BLE_ATT_ERR_UNLIKELY;
     last_request_id = id;
-    return handle_message(conn, id, receiver.data, receiver.total);
+    int result=handle_message(conn, id, receiver.data, receiver.total);
+    luna_weather_config_clear(receiver.data,receiver.total);
+    return result;
 }
 
 static int access_tx(uint16_t conn, uint16_t attr, struct ble_gatt_access_ctxt *ctxt, void *arg)

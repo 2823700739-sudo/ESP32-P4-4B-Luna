@@ -11,6 +11,8 @@
 #include "luna_dashboard.h"
 #include "luna_music_ui.h"
 #include "luna_weather.h"
+#include "luna_setup_portal.h"
+#include "luna_weather_config.h"
 #include "luna_time.h"
 #include "luna_ui_motion.h"
 #include "luna_font_decode.h"
@@ -33,6 +35,8 @@ static lv_obj_t *title,*artist,*play,*previous,*next,*play_icon,*record_logo,*mu
 static lv_obj_t *volume_button,*volume_icon,*volume_popup,*slider,*volume_percent,*mute,*mute_icon;
 static lv_obj_t *weather_city,*weather_temp,*weather_condition,*weather_note,*weather_sun,*weather_cloud,*weather_unknown;
 static lv_obj_t *weather_readings[3],*weather_labels[3],*weather_drops[3],*weather_visual;
+static lv_obj_t *setup_panel,*setup_name,*setup_access,*setup_info;
+static bool setup_visible,setup_was_active;
 static lv_obj_t *pet,*pet_image,*pet_bubble;
 static lv_obj_t *quota_values[2],*quota_bars[2],*quota_kicker,*quota_note,*project_name,*project_label;
 static lv_obj_t *computer_name,*computer_kicker,*computer_note,*gauges[2],*gauge_values[2],*temperatures[2],*memory_values[2],*memory_bars[2];
@@ -258,7 +262,7 @@ static void slider_event(lv_event_t *e)
 }
 static void gesture(lv_event_t *e)
 {
-    (void)e;blank_press=false;press_moved=true;if(idle||slider_drag||pet_held)return;
+    (void)e;blank_press=false;press_moved=true;if(idle||slider_drag||pet_held||setup_visible)return;
     lv_indev_t *in=lv_indev_active();if(!in)return;
     lv_dir_t dir=lv_indev_get_gesture_dir(in);
     int delta=dir==LV_DIR_LEFT?1:dir==LV_DIR_RIGHT?-1:0;
@@ -345,6 +349,48 @@ static void build_music(void)
     volume_button=button(cards[1],510,378,48,48,0x253145,255,volume_toggle,NULL);
     volume_icon=image(volume_button,&luna_icon_volume_24,12,12,24,SUB);
 }
+static void setup_click(lv_event_t *e)
+{
+    (void)e;setup_visible=true;last_touch=esp_timer_get_time();
+    luna_setup_ap_request(true);
+}
+static void setup_hide(lv_event_t *e) { (void)e;setup_visible=false; }
+static void setup_close(lv_event_t *e) { (void)e;setup_visible=false;luna_setup_ap_request(false); }
+
+static void build_setup_panel(void)
+{
+    setup_panel=box(root,65,110,590,500,0x1c293c,24);
+    lv_obj_remove_flag(setup_panel,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    text(setup_panel,"Wi-Fi 与天气设置",28,28,&luna_cjk_28,TEXT);
+    text(setup_panel,"1. 手机连接下方热点",28,84,&luna_cjk_20,SUB);
+    setup_name=bounded(setup_panel,"",28,121,534,&lv_font_montserrat_28,SKY,false);
+    text(setup_panel,"无需密码，直接连接",28,173,&luna_cjk_20,PEACH);
+    setup_access=bounded(setup_panel,"",28,207,534,&luna_cjk_20,SUB,false);
+    text(setup_panel,"2. 浏览器打开 http://192.168.4.1",28,269,&luna_cjk_20,TEXT);
+    setup_info=bounded(setup_panel,"正在开启配置热点...",28,316,534,&luna_cjk_20,SUB,false);
+    lv_obj_t *hide=button(setup_panel,28,402,230,54,0x29394f,255,setup_hide,NULL);
+    lv_obj_t *stop=button(setup_panel,282,402,280,54,0x29394f,255,setup_close,NULL);
+    lv_obj_center(text(hide,"暂时隐藏",0,0,&luna_cjk_20,TEXT));
+    lv_obj_center(text(stop,"关闭热点",0,0,&luna_cjk_20,TEXT));
+    lv_obj_add_flag(setup_panel,LV_OBJ_FLAG_HIDDEN);
+}
+
+static void update_setup(void)
+{
+    luna_setup_ap_state_t state={0};
+    if (!luna_setup_ap_snapshot(&state)) return;
+    if (state.active && !setup_was_active) {setup_visible=true;if(idle)set_idle(false);}
+    if (!state.active && setup_was_active) setup_visible=false;
+    setup_was_active=state.active;
+    lv_label_set_text(setup_name,state.active?state.ssid:"");
+    lv_label_set_text(setup_access,state.active?"手机提示无互联网时，请保持连接":"");
+    if (state.error) lv_label_set_text_fmt(setup_info,"Wi-Fi 初始化失败，错误码 %d",state.error);
+    else if (state.active) lv_label_set_text_fmt(setup_info,"剩余 %u 分钟，保存并联网后自动关闭",(state.remaining_seconds+59)/60);
+    else lv_label_set_text(setup_info,"正在开启配置热点...");
+    lv_obj_set_flag(setup_panel,LV_OBJ_FLAG_HIDDEN,!setup_visible||idle);
+    luna_weather_config_clear(&state,sizeof(state));
+}
+
 static void build_weather(void)
 {
     card_header(2,"WEATHER",&luna_icon_weather_24,"尚未设置地点",SKY);
@@ -374,6 +420,8 @@ static void build_weather(void)
         lv_obj_set_style_text_align(weather_readings[i],LV_TEXT_ALIGN_CENTER,0);
     }
     weather_note=bottom(2,"尚无天气数据","OPEN-METEO");
+    lv_obj_t *wifi=button(cards[2],435,369,123,34,0x29394f,255,setup_click,NULL);
+    lv_obj_center(text(wifi,"Wi-Fi",0,0,&lv_font_montserrat_20,SKY));
 }
 static void track(lv_obj_t *p,int x,int y,int w,int h){box(p,x,y,w,h,0x111c2c,h/2);}
 static void build_quota(void)
@@ -623,6 +671,7 @@ static void update(lv_timer_t *timer)
     if(elapsed<0)elapsed=0;
     if(elapsed>100000)elapsed=100000;
     if(!idle&&!slider_drag&&!pet_held&&now-last_touch>=IDLE_US)set_idle(true);
+    update_setup();
     // Radio collectors continue caching real state. Do not lay out hidden
     // weather/quotas/music or animate the record while in always-bright standby.
     if(idle){update_clock(now);update_sleep_zzz(now);return;}
@@ -730,7 +779,7 @@ void luna_music_ui_start(lv_obj_t *screen)
     lv_obj_set_style_pad_all(slider,7,LV_PART_KNOB);lv_obj_add_event_cb(slider,slider_event,LV_EVENT_ALL,NULL);
     lv_obj_remove_flag(slider,LV_OBJ_FLAG_GESTURE_BUBBLE);
     bounded(volume_popup,"上下拖动调节",18,275,106,&luna_cjk_13,SUB,false);
-    build_idle();last_touch=esp_timer_get_time();
+    build_idle();build_setup_panel();last_touch=esp_timer_get_time();
     bubble(root);lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESSED,NULL);
     lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESSING,NULL);lv_obj_add_event_cb(root,gesture,LV_EVENT_GESTURE,NULL);
     lv_obj_add_event_cb(root,screen_touch,LV_EVENT_RELEASED,NULL);lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESS_LOST,NULL);

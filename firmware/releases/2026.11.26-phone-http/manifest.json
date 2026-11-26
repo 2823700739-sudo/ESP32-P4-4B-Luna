@@ -1,0 +1,154 @@
+{
+  "version": "2026.11.26-phone-http",
+  "product": "Luna B1 five-card desktop companion",
+  "board": "Waveshare ESP32-P4-WIFI6-Touch-LCD-4B",
+  "chip": "esp32p4",
+  "chip_revision_min": "1.0",
+  "chip_revision_max": "1.99",
+  "idf_version": "6.0.2",
+  "lvgl_version": "9.3.0",
+  "esp_hosted_version": "2.12.11",
+  "flash_settings": {
+    "flash_mode": "dio",
+    "flash_size": "32MB",
+    "flash_freq": "80m"
+  },
+  "cpu_mhz": 360,
+  "display": "720x720 / DOUBLE_DIRECT",
+  "wifi_credentials": "empty",
+  "timezone": "Asia/Shanghai (fixed UTC+8)",
+  "app_partition_size_bytes": 10485760,
+  "files": [
+    {
+      "file": "luna-panel.bin",
+      "offset": "0x20000",
+      "size_bytes": 9829184,
+      "sha256": "861e45273540c8a065fa39d19e6b9f74b71a7259cd018948cf685f1551e6b169"
+    },
+    {
+      "file": "bootloader.bin",
+      "offset": "0x2000",
+      "size_bytes": 24016,
+      "sha256": "c1f2f3c6112ed5485e97e9fa2e142d887a4f8f4f1f6b7e958b8a4282912cab8d"
+    },
+    {
+      "file": "partition-table.bin",
+      "offset": "0x10000",
+      "size_bytes": 3072,
+      "sha256": "8f15ba571a89873f9c8e580df81040bd3440485adad7d7c54052999d7455a49f"
+    },
+    {
+      "file": "luna-first-install-0x0.bin",
+      "offset": "0x0",
+      "size_bytes": 9960256,
+      "sha256": "9edcf3103d7d9e4a16d6e0b15b640b645c123a09a858520aadac9f662a128572",
+      "install_mode": "first_install_only"
+    }
+  ],
+  "excluded": [
+    "Device NVS contents (not copied; RAW padding clears target NVS)",
+    "Device bonds (not copied; RAW padding clears target bonds)",
+    "TF data",
+    "C6 firmware",
+    "private Wi-Fi configuration",
+    "ELF/map/build logs"
+  ],
+  "limitations": [
+    "Weather-location save, fresh weather retrieval, new merged installation and power-cycle recovery not separately confirmed by this Wi-Fi report",
+    "Existing C6 must support the configured Hosted Wi-Fi RPC; no C6 image/upgrade included",
+    "No DNS captive interception or NAT; manually open http://192.168.4.1 and stay connected without Internet",
+    "Merged RAW clears NVS/bonds/network/city/cache; existing Luna upgrades use app at 0x20000",
+    "NVS not encrypted at rest; never distribute a device flash dump"
+  ],
+  "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
+  "source_branch": "codex/phone-wifi-setup",
+  "source_tag": null,
+  "distribution_version": "2026.11.26-phone-http",
+  "project_license": "Apache-2.0 (explicit per-file and third-party licenses retained)",
+  "license_materials": [
+    "../../../LICENSE",
+    "../../../NOTICE",
+    "../../../THIRD_PARTY_NOTICES.md",
+    "../../../LICENSES/"
+  ],
+  "binary_update": "Phone APSTA setup, temporary open hotspot, AP-only HTTP UI, bounded asynchronous Wi-Fi scan/selection, IPv4-mapped IPv6 AP socket fix, RAM network trial, city search and existing versioned NVS commit",
+  "hardware_validation": {
+    "this_candidate_tested": true,
+    "p4_app_flash_verified": true,
+    "p4_boot_observed": true,
+    "ap_started": false,
+    "phone_connected": false,
+    "first_wifi_setup": false,
+    "wifi_scan": false,
+    "weather_https": false,
+    "existing_nvs_network_restore": true,
+    "ntp_synced": false,
+    "reboot_restore": false,
+    "weather_last_observed_errors": [],
+    "user_reported_wifi_working": true
+  },
+  "source_revision_base": "ec0fe7b7823ba923927ee1635822afde9e04790c",
+  "source_worktree_changes": true,
+  "status": "feature-branch preview; author confirmed Wi-Fi working; detailed weather/reboot acceptance remains open",
+  "setup_protocol": [
+    "phone HTTP setup on temporary AP",
+    "weather_configure (optional BLE fallback)",
+    "weather_status"
+  ],
+  "setup_hotspot": {
+    "authentication": "open; no AP password",
+    "max_clients": 1,
+    "lifetime_seconds": 600,
+    "after_save_online_seconds": 20,
+    "http_address": "http://192.168.4.1"
+  },
+  "previous_candidate_user_observation": {
+    "version": "2026.11.26-phone-scan",
+    "phone_joined_setup_ap": true,
+    "http_page_opened": false,
+    "source": "user confirmation on 2026-11-26"
+  },
+  "socket_gate_fix": {
+    "ipv4_and_ipv4_mapped_ap_address": true,
+    "native_ipv6_and_lan_still_rejected": true,
+    "phone_verification_pending": true
+  },
+  "merged_image": {
+    "format": "raw",
+    "tool": "esptool 5.4.0",
+    "target_offset": "0x0",
+    "gap_fill": "0xFF",
+    "inputs": [
+      {
+        "file": "bootloader.bin",
+        "offset": "0x2000"
+      },
+      {
+        "file": "partition-table.bin",
+        "offset": "0x10000"
+      },
+      {
+        "file": "luna-panel.bin",
+        "offset": "0x20000"
+      }
+    ],
+    "write_end_exclusive": "0x97fb40",
+    "erase_end_exclusive": "0x980000",
+    "overwrites": [
+      "bootloader",
+      "partition table",
+      "NVS including BLE bonds/weather cache",
+      "phy_init",
+      "factory app"
+    ],
+    "storage_offset": "0xA20000",
+    "full_flash_padding": false,
+    "warning": "First installation only. RAW padding overwrites NVS; use app-only for existing devices."
+  },
+  "user_confirmation": {
+    "date": "2026-11-26",
+    "report": "刚刚我实测 WiFi 可以了",
+    "scope": "Wi-Fi reported working by the author after the phone-http update. Individual scan, weather-location save, new merged install and power-cycle checks were not separately specified."
+  },
+  "verification_convention": "False in hardware_validation means not confirmed in the recorded observation; not evidence that the feature is unavailable."
+}
