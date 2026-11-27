@@ -1,6 +1,6 @@
 # Luna 开发文档
 
-本文说明当前五卡 B1 产品的技术实现。功能与界面见[中文介绍](../README.md) / [English](../README.en.md)，安装与构建见[部署教程](DEPLOYMENT.md)。
+本文说明当前六卡 B1 产品的技术实现。功能与界面见[中文介绍](../README.md) / [English](../README.en.md)，安装与构建见[部署教程](DEPLOYMENT.md)。
 
 ## 架构
 
@@ -10,7 +10,7 @@ flowchart LR
   Codex[本地 Codex App Server] --> Agent
   Agent <-->|认证加密 BLE| P4[ESP32-P4 / NimBLE 主机]
   P4 <-->|SDIO / VHCI| C6[板载 ESP32-C6 无线控制器]
-  P4 --> UI[LVGL 五卡 / 像素猫 / 待机]
+  P4 --> UI[LVGL 六卡 / 像素猫 / 待机]
   Weather[Open-Meteo HTTPS] <-->|设备 Wi-Fi| P4
   NTP[NTP] --> P4
   P4 <--> NVS[NVS 绑定 / 地点与天气缓存]
@@ -78,11 +78,15 @@ hello 协商能力与会话/启动身份。PC 请求串行、超时 8 秒；不�
 
 ## 天气、时间与显示
 
-天气通过 esp_http_client + TLS 根证书包访问 Open-Meteo HTTPS，NVS 保存地点与快照。新 `2026.11.26-phone-http` 候选由 `luna_setup_portal.c` / `web/setup.html` 提供手机设置：短时无密码热点、AP侧本地HTTP、本地异步扫描/选择 Wi-Fi、试连网络、设备 HTTPS 城市查询和单一版本 NVS 配置提交。`luna_setup_request.c` 校验平面JSON、Host/Origin/会话token；热点无线切换与持久化仍由 `luna_ble_wifi.c` 单一后台worker执行。试连不保存，关闭/超时恢复上次提交配置；保存后设备独立联网，Windows不转发天气。扫描基于 [ESP-IDF 6.0.2 Wi-Fi API](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/network/esp_wifi.html)，通过受相同 AP/Host/Origin/token 保护的 POST/GET /api/scan，由原worker异步执行；12秒设备超时、5秒请求冷却、最多32原始/16去重结果；释放驱动列表，连接/保存与扫描互斥，失败保留手填，不为扫描主动断开既有STA。认证BLE向导保留为可选兼容入口，正常Start不再问天气。旧在线标签无这些入口；实际候选硬件结果须查manifest，不能从源码推断通过。
+天气通过 esp_http_client + TLS 根证书包访问 Open-Meteo HTTPS，NVS 保存地点与快照。`2026.11.27` 定版由 `luna_setup_portal.c` / `web/setup.html` 提供手机设置：短时无密码热点、AP侧本地HTTP、本地异步扫描/选择 Wi-Fi、试连网络、设备 HTTPS 城市查询和单一版本 NVS 配置提交。`luna_setup_request.c` 校验平面JSON、Host/Origin/会话token；热点无线切换与持久化仍由 `luna_ble_wifi.c` 单一后台worker执行。试连不保存，关闭/超时恢复上次提交配置；保存后设备独立联网，Windows不转发天气。扫描基于 [ESP-IDF 6.0.2 Wi-Fi API](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/network/esp_wifi.html)，通过受相同 AP/Host/Origin/token 保护的 POST/GET /api/scan，由原worker异步执行；12秒设备超时、5秒请求冷却、最多32原始/16去重结果；释放驱动列表，连接/保存与扫描互斥，失败保留手填，不为扫描主动断开既有STA。认证BLE向导保留为可选兼容入口，正常Start不再问天气。旧在线标签无这些入口；实际硬件验证范围须查manifest，不能从源码推断通过。
 
 时间策略统一写系统时钟，BLE 优先；网络就绪且未收到 BLE 时间或距上次超过 120 秒，备用 NTP 才可更新。时区固定 CST-8，NTP 周期一小时。
 
 主卡为 590×450，位置 (65,135)，屏幕 720×720。CPU 固定 360 MHz，DOUBLE_DIRECT 双缓冲；仅更新可见卡，普通动效局部绘制，场景切换/唤醒保留完整重绘。待机减少 UI 调度，不改变亮度或进入整机休眠。中文字库为 Noto Sans CJK 16 / 28 px，共享 RLE 解码受互斥保护。
+
+## 专注计时
+
+luna_focus.c提供1–999分钟本机单调截止时间状态机，RAM保存运行/暂停/完成。luna_preview_ui.c实现B布局、绿色LVGL键盘、全屏模态、运行禁止待机/暂停允许与原行走猫提醒。进入专注确认提醒；完成后重新计算普通待机期限，重启回25分钟。文字用实际字形边界居中。网页模型仅为模拟，不能控制设备。见[专注说明](FOCUS.md)。
 
 ## 构建与公开文件
 

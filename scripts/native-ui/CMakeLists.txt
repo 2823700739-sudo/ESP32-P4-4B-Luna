@@ -9,6 +9,7 @@ set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${REPO}/firmware/luna-panel/managed_components/lvgl__lvgl" lvgl)
 file(GLOB ASSETS "${REPO}/firmware/luna-panel/main/assets/*.c")
 add_executable(luna_ui_test ui_test.c "${REPO}/firmware/luna-panel/main/luna_ui_motion.c"
+  "${REPO}/firmware/luna-panel/main/luna_focus.c"
   "${REPO}/firmware/luna-panel/main/luna_font_decode.c" ${ASSETS})
 target_compile_definitions(luna_ui_test PRIVATE LUNA_NATIVE_UI=1)
 target_include_directories(luna_ui_test PRIVATE "${REPO}/firmware/luna-panel/main"

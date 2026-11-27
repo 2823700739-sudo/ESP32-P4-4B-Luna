@@ -42,6 +42,8 @@ static luna_setup_ap_state_t ap;
 static atomic_int ap_request;
 static int64_t ap_deadline, ap_close_after;
 static bool trial_active, ap_committed;
+static char trial_ssid[33]; /* Worker-owned; never sent in status or logged. */
+static int64_t trial_deadline;
 static luna_setup_scan_t scan;
 static atomic_bool scan_busy;
 static atomic_int scan_done;
@@ -59,7 +61,7 @@ bool luna_setup_scan_snapshot(luna_setup_scan_t *out)
 bool luna_setup_scan_request(void)
 {
     if (!setup_mutex || xSemaphoreTake(setup_mutex,0)!=pdTRUE) return false;
-    bool accepted=ap.active && setup_status.state!=1 && !atomic_load(&scan_busy) &&
+    bool accepted=ap.active && setup_status.state!=1 && ap.trial_state!=1 && !atomic_load(&scan_busy) &&
                   esp_timer_get_time()>=scan_next;
     if (accepted) {
         memset(&scan,0,sizeof(scan));scan.state=1;
@@ -159,7 +161,7 @@ static bool queue_settings(const luna_weather_config_t *config, bool trial)
     bool accepted=false;
     bool busy=setup_status.state==1;
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
-    busy=busy || atomic_load(&scan_busy);
+    busy=busy || atomic_load(&scan_busy) || ap.trial_state==1 || (trial && !ap.active);
 #endif
     if (!busy) {
         luna_ble_wifi_setup_status_t previous=setup_status;
@@ -169,6 +171,12 @@ static bool queue_settings(const luna_weather_config_t *config, bool trial)
         accepted=xQueueSend(setup_queue,&job,0)==pdTRUE;
         luna_weather_config_clear(&job,sizeof(job));
         if (!accepted) setup_status=previous;
+#ifdef CONFIG_LUNA_BLE_B1_MUSIC
+        else if (trial) {
+            memcpy(ap.trial_id,config->setup_id,sizeof(ap.trial_id));
+            ap.trial_state=1;ap.trial_error=0;
+        }
+#endif
     }
     xSemaphoreGive(setup_mutex);
     return accepted;
@@ -379,6 +387,7 @@ static void close_ap(void)
         }
         luna_weather_config_clear(&prior,sizeof(prior));trial_active=false;
     }
+    trial_deadline=0;luna_weather_config_clear(trial_ssid,sizeof(trial_ssid));
     ESP_LOGI(TAG,"Phone setup AP closed");
 }
 
@@ -391,6 +400,31 @@ static void service_ap(void)
     }
     if (request<0 || (ap.active && esp_timer_get_time()>=ap_deadline) ||
         (ap_close_after && esp_timer_get_time()>=ap_close_after)) close_ap();
+}
+
+static void service_trial(void)
+{
+    /* A previously online station is not evidence for a newly queued trial.
+       All radio queries stay on the worker, outside the status mutex. */
+    xSemaphoreTake(setup_mutex,portMAX_DELAY);
+    bool pending=ap.active && trial_active && ap.trial_state==1 && setup_status.state!=1;
+    xSemaphoreGive(setup_mutex);
+    if (!pending || !trial_deadline) return;
+    bool connected=false;
+    if (atomic_load(&online)) {
+        wifi_ap_record_t record={0};
+        connected=esp_wifi_sta_get_ap_info(&record)==ESP_OK &&
+                  !memcmp(record.ssid,trial_ssid,sizeof(record.ssid));
+        luna_weather_config_clear(&record,sizeof(record));
+    }
+    if (!connected && esp_timer_get_time()<trial_deadline) return;
+    xSemaphoreTake(setup_mutex,portMAX_DELAY);
+    /* A new HTTP request may have been queued during the radio query. */
+    if (setup_status.state!=1 && ap.trial_state==1) {
+        ap.trial_state=connected?2:3;
+        ap.trial_error=connected?ESP_OK:ESP_ERR_TIMEOUT;
+    }
+    xSemaphoreGive(setup_mutex);
 }
 #endif
 
@@ -444,6 +478,7 @@ static void setup_worker(void *unused)
     for (;;) {
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
         service_ap();
+        service_trial();
         service_scan();
         if (ap.active && ap_committed && !trial_active && atomic_load(&online) && !ap_close_after)
             ap_close_after=esp_timer_get_time()+20000000;
@@ -459,6 +494,9 @@ static void setup_worker(void *unused)
             }
 #endif
             atomic_store(&reconfiguring,true);network_ready(false);
+#ifdef CONFIG_LUNA_BLE_B1_MUSIC
+            memcpy(trial_ssid,settings.ssid,sizeof(trial_ssid));
+#endif
             esp_err_t rc=apply_wifi(&settings);
             atomic_store(&reconfiguring,false);
             if (rc==ESP_OK) (void)esp_wifi_connect();
@@ -466,6 +504,8 @@ static void setup_worker(void *unused)
             setup_status=job.prior;
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
             ap.error=rc;trial_active=true;ap_close_after=0;ap_committed=false;
+            trial_deadline=esp_timer_get_time()+30000000;
+            if (rc!=ESP_OK) {ap.trial_state=3;ap.trial_error=rc;}
 #endif
             xSemaphoreGive(setup_mutex);
             luna_weather_config_clear(&job,sizeof(job));
@@ -482,6 +522,7 @@ static void setup_worker(void *unused)
             set_result(rc==ESP_OK?2:3,rc,true);
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
             trial_active=false;ap_committed=true;
+            trial_deadline=0;luna_weather_config_clear(trial_ssid,sizeof(trial_ssid));
 #endif
         } else {
             /* Previous committed settings remain authoritative after a failed save. */

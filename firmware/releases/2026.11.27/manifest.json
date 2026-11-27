@@ -1,0 +1,237 @@
+{
+  "version": "2026.11.27-focus-align",
+  "product": "Luna B1 six-card desktop companion",
+  "board": "Waveshare ESP32-P4-WIFI6-Touch-LCD-4B",
+  "chip": "esp32p4",
+  "chip_revision_min": "1.0",
+  "chip_revision_max": "1.99",
+  "idf_version": "6.0.2",
+  "lvgl_version": "9.3.0",
+  "esp_hosted_version": "2.12.11",
+  "flash_settings": {
+    "flash_mode": "dio",
+    "flash_size": "32MB",
+    "flash_freq": "80m"
+  },
+  "cpu_mhz": 360,
+  "display": "720x720 / DOUBLE_DIRECT",
+  "wifi_credentials": "empty",
+  "timezone": "Asia/Shanghai (fixed UTC+8)",
+  "app_partition_size_bytes": 10485760,
+  "files": [
+    {
+      "file": "luna-panel.bin",
+      "offset": "0x20000",
+      "size_bytes": 9846560,
+      "sha256": "73cb5ce1a8ce86f5df842d3b6af97ab7e51b4d8db7ae583ce6d215d5ce363526"
+    },
+    {
+      "file": "bootloader.bin",
+      "offset": "0x2000",
+      "size_bytes": 24016,
+      "sha256": "c1f2f3c6112ed5485e97e9fa2e142d887a4f8f4f1f6b7e958b8a4282912cab8d"
+    },
+    {
+      "file": "partition-table.bin",
+      "offset": "0x10000",
+      "size_bytes": 3072,
+      "sha256": "8f15ba571a89873f9c8e580df81040bd3440485adad7d7c54052999d7455a49f"
+    },
+    {
+      "file": "luna-first-install-0x0.bin",
+      "offset": "0x0",
+      "size_bytes": 9977632,
+      "sha256": "51ae99b4b879dccaf97b6038b25df427faec58ad2473d58afb80c186c2c8baa1",
+      "install_mode": "first_install_only"
+    }
+  ],
+  "excluded": [
+    "Device NVS contents (not copied; RAW padding clears target NVS)",
+    "Device bonds (not copied; RAW padding clears target bonds)",
+    "TF data",
+    "C6 firmware",
+    "private Wi-Fi configuration",
+    "ELF/map/build logs"
+  ],
+  "limitations": [
+    "Release approved by user overall; full-duration focus accuracy, new first installation, newly saved setup power-cycle and long-run recovery matrix not individually recorded",
+    "Focus state is RAM-only; reboot/power-off resets to idle 25 minutes",
+    "Existing compatible C6 required; no C6 image or upgrade included",
+    "P4 rev1.x / 32 MB only; other boards/revisions are not validated",
+    "Merged RAW at 0x0 clears NVS/bonds/network/city/cache; an existing matching Luna uses app-only at 0x20000",
+    "Temporary setup AP is open and HTTP; no wireless transport encryption or NVS-at-rest encryption",
+    "PC features require Windows 11, BLE and the matching Agent; GSMTC/Codex source availability varies"
+  ],
+  "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
+  "source_branch": "main",
+  "source_tag": "v2026.11.27",
+  "distribution_version": "2026.11.27",
+  "project_license": "Apache-2.0 (explicit per-file and third-party licenses retained)",
+  "license_materials": [
+    "../../../LICENSE",
+    "../../../NOTICE",
+    "../../../THIRD_PARTY_NOTICES.md",
+    "../../../LICENSES/"
+  ],
+  "binary_update": "Center visible glyph bounds horizontally and vertically for roaming-cat speech bubbles and Focus custom/start/end button labels, including dynamic timer states; prior green K2/phone/music behavior retained",
+  "hardware_validation": {
+    "this_candidate_tested": false,
+    "p4_app_flash_verified": true,
+    "p4_boot_observed": true,
+    "ap_started": false,
+    "phone_connected": false,
+    "first_wifi_setup": false,
+    "wifi_scan": false,
+    "http_page_opened": false,
+    "existing_nvs_network_restore": true,
+    "ntp_synced": true,
+    "weather_https": true,
+    "reboot_restore": false,
+    "music_controls": false,
+    "volume_control": false,
+    "tonearm_motion": false,
+    "user_reported_music_update_working": true,
+    "focus_controls": false,
+    "focus_real_duration_timing": false,
+    "focus_completion_reminder": false,
+    "focus_custom_keyboard": false,
+    "focus_keyboard_modal": false,
+    "focus_standby_policy": false,
+    "text_alignment_visual_acceptance": false,
+    "user_approved_release": true
+  },
+  "source_revision_base": "408a9ff7be9c51d77fd04ac04e1635c3f13dcb0c",
+  "source_worktree_changes": true,
+  "status": "release frozen and approved by user; app-only deployment verified; specific hardware acceptance limits retained",
+  "setup_protocol": [
+    "phone HTTP setup on temporary AP",
+    "weather_configure (optional BLE fallback)",
+    "weather_status"
+  ],
+  "setup_hotspot": {
+    "authentication": "open; no AP password",
+    "max_clients": 1,
+    "lifetime_seconds": 600,
+    "after_save_online_seconds": 20,
+    "http_address": "http://192.168.4.1"
+  },
+  "previous_candidate_user_observation": {
+    "version": "2026.11.26-phone-http",
+    "phone_joined_setup_ap": true,
+    "http_page_opened": true,
+    "wifi_scan": true,
+    "source": "user confirmation on 2026-11-26"
+  },
+  "socket_gate_fix": {
+    "ipv4_and_ipv4_mapped_ap_address": true,
+    "native_ipv6_and_lan_still_rejected": true,
+    "phone_verification_pending": true
+  },
+  "verification_convention": "False in hardware_validation means not confirmed in the recorded observation; not evidence that the feature is unavailable.",
+  "local_validation": {
+    "scope": "Final release regression of frozen firmware sources and public documentation",
+    "preview_browser_checks": 106,
+    "native_lvgl_single_and_double_direct": true,
+    "rendered_ink_center_tolerance_pixels": 1,
+    "public_idf_build": true,
+    "previous_candidate_full_tests": 194,
+    "previous_candidate_model_tests": 34,
+    "previous_full_model_suites_rerun": true,
+    "full_tests": 194,
+    "hosted_tests": 124,
+    "preview_model_tests": 34,
+    "phone_browser_mock_scenarios": 20,
+    "public_idf_build_scope": "Already verified for this exact frozen app; not rebuilt for packaging"
+  },
+  "previous_music_user_confirmation": {
+    "version": "2026.11.27-music-tonearm",
+    "date": "2026-11-27",
+    "report": "测试可以",
+    "scope": "User confirmed the latest music-card update works in their test. Individual real-player, volume and tonearm steps were not separately described; this is user feedback, not an assistant instrumented measurement.",
+    "confirmed_scope": [
+      "music-card update overall"
+    ],
+    "not_confirmed_by_this_report": [
+      "phone setup and new configuration power-cycle recovery",
+      "full long-run and recovery matrix"
+    ]
+  },
+  "focus_timer": {
+    "presets_minutes": [
+      25,
+      45,
+      60
+    ],
+    "session_storage": "RAM only; reboot resets to idle 25 minutes",
+    "time_source": "device monotonic microseconds; independent of wall-clock/NTP",
+    "continues_across_cards": true,
+    "running_prevents_clock_standby": true,
+    "paused_allows_clock_standby": true,
+    "requires_pc_or_network": false,
+    "custom_minutes": {
+      "minimum": 1,
+      "maximum": 999,
+      "integer_only": true,
+      "confirm_starts_timer": false
+    },
+    "keyboard": {
+      "component": "LVGL 9.3 Keyboard",
+      "license": "MIT",
+      "style": "K2 rounded mint green",
+      "blocks_background_clicks_gestures_navigation_and_standby": true
+    },
+    "completion": "pending navigation dot and cat bubble, no forced wake/navigation",
+    "acknowledgement": "visit Focus, choose a preset, end or restart",
+    "auto_break_timer": false,
+    "guide": "../../../docs/FOCUS.md"
+  },
+  "text_alignment": {
+    "targets": [
+      "greeting/rest speech bubble",
+      "custom/default/custom-999 label",
+      "start/pause/resume/restart/end including disabled end"
+    ],
+    "algorithm": "visible glyph bounds using actual font metrics; centered on both axes",
+    "assets_changed": false
+  },
+  "merged_image": {
+    "format": "raw",
+    "tool": "esptool 5.4.0",
+    "target_offset": "0x0",
+    "gap_fill": "0xFF",
+    "inputs": [
+      {
+        "file": "bootloader.bin",
+        "offset": "0x2000"
+      },
+      {
+        "file": "partition-table.bin",
+        "offset": "0x10000"
+      },
+      {
+        "file": "luna-panel.bin",
+        "offset": "0x20000"
+      }
+    ],
+    "write_end_exclusive": "0x983f20",
+    "erase_end_exclusive": "0x984000",
+    "overwrites": [
+      "bootloader",
+      "partition table",
+      "NVS including BLE bonds/weather cache",
+      "phy_init",
+      "factory app"
+    ],
+    "storage_offset": "0xA20000",
+    "full_flash_padding": false,
+    "warning": "First installation only. RAW padding overwrites NVS; use app-only for existing devices."
+  },
+  "release_date": "2026-11-27",
+  "release_source": "Git tag v2026.11.27",
+  "release_notes": "Six cards; phone Wi-Fi row selection and connection/save feedback; full-screen setup modal; longer music volume slider and animated tonearm; local Focus timer with green K2 custom-minute keyboard and centered labels",
+  "user_release_confirmation": {
+    "date": "2026-11-27",
+    "report": "很好，现在就按照这个版本定版",
+    "scope": "User approved the current version for release. This does not document separate full-duration timer, new blank-device install, power-cycle or long-run measurements."
+  }
+}

@@ -4,29 +4,46 @@
 <style>
 :root{color-scheme:dark;font:16px/1.6 system-ui,sans-serif;background:#101827;color:#f1f5fb}body{max-width:540px;margin:0 auto;padding:28px 20px 50px}h1{font-size:27px;margin:0}h2{font-size:19px}section{background:#1c293c;border:1px solid #34465f;border-radius:18px;padding:20px;margin-top:20px}p,small{color:#b6c4d9}label{display:block;margin-top:14px}input,select,button{box-sizing:border-box;width:100%;font:inherit;border-radius:10px;padding:12px;border:1px solid #50617c;background:#101827;color:inherit;margin-top:5px}button{background:#b8a2ff;color:#101827;font-weight:650;cursor:pointer}button.secondary{background:#29394f;color:#e1eafa}button:disabled{opacity:.5;cursor:wait}#status{white-space:pre-line;border-left:3px solid #81debb;padding-left:12px}small{display:block;margin-top:12px}details{margin-top:16px}summary{cursor:pointer}#notice{color:#ffbc82}input:focus,button:focus,select:focus{outline:2px solid #86ccfa;outline-offset:2px}
 [hidden]{display:none!important}
+.networks{display:grid;gap:8px;max-height:330px;overflow-y:auto;margin:12px 0;padding:3px}.network-row{display:flex;align-items:center;gap:12px;text-align:left;margin:0;background:#101827;color:#f1f5fb;font-weight:400;min-width:0}.network-row[aria-pressed="true"]{border-color:#b8a2ff;background:#34304e}.network-name{flex:1;min-width:0;overflow-wrap:anywhere}.network-meta{font-size:13px;color:#b6c4d9;white-space:nowrap}.feedback{scroll-margin-block:24px;white-space:pre-line;padding:12px;border-radius:10px;background:#101827;border-left:3px solid #86ccfa}.feedback:empty{display:none}.feedback[data-kind="success"]{border-color:#81debb;color:#a9efd2}.feedback[data-kind="failure"]{border-color:#ffbc82;color:#ffcfaa}
 </style>
 <h1>Luna <span style="color:#b8a2ff">✦</span></h1><p>用手机设置 Wi-Fi 与天气，电脑无需参与。Luna 热点无需密码。</p>
 <p id="status" role="status" aria-live="polite">正在连接 Luna…</p><p id="notice" role="alert"></p>
 <section><h2>1 · 连接家里的 Wi-Fi</h2>
 <button id="scan" type="button" class="secondary" disabled>扫描 Wi-Fi</button>
 <p id="scanStatus" role="status" aria-live="polite">点击扫描，选择附近的 2.4 GHz Wi-Fi。</p>
-<label id="networksLabel" hidden>选择 Wi-Fi<select id="networks"><option value="">请选择网络</option></select></label>
+<div id="networksLabel" hidden><span>选择 Wi-Fi</span><div id="networks" class="networks" role="group" aria-label="附近的 Wi-Fi"></div></div>
 <form id="network">
 <label>Wi-Fi 名称（2.4 GHz）<input id="ssid" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
 <label>Wi-Fi 密码<input id="password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-<button id="connect" disabled>连接并继续</button></form><small>选网络后输入家中 Wi-Fi 密码，再点连接。找不到或使用隐藏网络时，可手动填写名称。此步骤只在内存中试连；选好天气地点并保存后，设置才会在断电后保留。手机提示“无互联网”时，请选择继续连接 Luna。</small></section>
+<button id="connect" disabled>连接并继续</button><p id="connectStatus" class="feedback" role="status" aria-live="polite"></p></form><small>选网络后输入家中 Wi-Fi 密码，再点连接。找不到或使用隐藏网络时，可手动填写名称。此步骤只在内存中试连；选好天气地点并保存后，设置才会在断电后保留。手机提示“无互联网”时，请选择继续连接 Luna。</small></section>
 <section><h2>2 · 选择天气地点</h2><form id="search"><label>城市或区县<input id="query" placeholder="例如：深圳 / Shenzhen" required maxlength="40"></label><button id="find" disabled>搜索城市</button></form>
 <label id="choicesLabel" hidden>核对省份与国家<select id="choices"><option value="">请选择地点</option></select></label>
 <details id="manual"><summary>手动填写地点与经纬度</summary><label>地点名称<input id="location" maxlength="47"></label><label>纬度（-90～90）<input id="latitude" type="number" step="any" min="-90" max="90"></label><label>经度（-180～180）<input id="longitude" type="number" step="any" min="-180" max="180"></label></details>
-<button id="save" disabled>保存到 Luna</button><small>城市搜索由 Luna 联网查询 Open-Meteo / GeoNames，Wi-Fi 密码不会发送给城市服务。同名地点请按省份与国家选择；也可直接填写明确经纬度。</small></section>
+<button id="save" disabled>保存到 Luna</button><p id="saveStatus" class="feedback" role="status" aria-live="polite"></p><small>城市搜索由 Luna 联网查询 Open-Meteo / GeoNames，Wi-Fi 密码不会发送给城市服务。同名地点请按省份与国家选择；也可直接填写明确经纬度。</small></section>
 <button id="close" class="secondary" disabled>关闭配置热点</button><small>热点最多开放 10 分钟，成功保存并联网后约 20 秒关闭。设置保存在设备上；天气与 NTP 校时由 Luna 独立联网。Windows 脚本仅用于电脑相关数据和控制。</small>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
 let token='',requestId='',cities=[],pending=false,saved=false,polling=false,uncertain=false;
 let networks=[],scanning=false,scanUntil=0;
+let trialId='',trialPending=false;
 const byteLength=s=>new TextEncoder().encode(s).length;
 function notice(text){$('notice').textContent=text;}
+function feedback(id,text,kind='pending',attention=false){
+ const node=$(id),changed=node.textContent!==text;
+ node.textContent=text;node.dataset.kind=kind;
+ if(changed&&attention)node.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function busy(){return pending||saved||uncertain||scanning||trialPending;}
+function controls(){
+ const locked=busy();
+ for(const id of ['connect','save','scan','ssid','password','choices','location','latitude','longitude'])$(id).disabled=locked;
+ for(const row of $('networks').children)row.disabled=locked;
+ if(locked)$('find').disabled=true;
+ $('connect').textContent=trialPending?'正在连接…':'连接并继续';
+ $('save').textContent=pending||uncertain?'正在确认保存…':saved?'已保存到 Luna':'保存到 Luna';
+}
+function resetTrial(){trialId='';trialPending=false;feedback('connectStatus','');}
 function networkFields(){
  const ssid=$('ssid').value,password=$('password').value;
  if(!ssid||byteLength(ssid)>32)throw Error('Wi-Fi 名称需要 1～32 个 UTF-8 字节。');
@@ -48,8 +65,14 @@ async function pollScan(){
  if(result.state===1 && Date.now()<scanUntil)return;
  scanning=false;$('scan').textContent='重新扫描 Wi-Fi';
  if(result.state!==2){$('scanStatus').textContent='扫描未完成，设备可能正在连接网络。稍等几秒重试，或手动输入 Wi-Fi 名称。';return;}
- networks=result.networks||[];$('networks').replaceChildren(new Option('请选择网络',''));
- networks.forEach((wifi,i)=>$('networks').add(new Option(`${wifi.ssid} · ${wifi.secured?'需密码':'无密码'} · ${wifi.rssi>=-60?'信号强':wifi.rssi>=-75?'信号中等':'信号弱'}`,String(i))));
+ networks=result.networks||[];$('networks').replaceChildren();
+ networks.forEach((wifi,i)=>{
+  const row=document.createElement('button'),name=document.createElement('span'),meta=document.createElement('span');
+  row.type='button';row.className='network-row';row.dataset.index=String(i);row.setAttribute('aria-pressed','false');
+  name.className='network-name';name.textContent=wifi.ssid;
+  meta.className='network-meta';meta.textContent=`${wifi.secured?'需密码':'无密码'} · ${wifi.rssi>=-60?'信号强':wifi.rssi>=-75?'信号中等':'信号弱'}`;
+  row.append(name,meta);$('networks').append(row);
+ });
  $('networksLabel').hidden=!networks.length;
  $('scanStatus').textContent=networks.length?'请选择网络，再输入密码。选中不会自动连接。':'没有找到可用网络，请靠近路由器后重试，或手动输入名称。';
  }catch(error){if(Date.now()>=scanUntil){scanning=false;$('scan').textContent='重新扫描 Wi-Fi';$('scanStatus').textContent='扫描状态读取失败，请保持连接 Luna 热点后重试，或手动输入名称。';}}
@@ -59,44 +82,67 @@ async function poll(){
  try{
  const state=await api('/api/status'),ours=!!requestId&&state.setup_id===requestId;
  saved=ours&&state.saved;
- let lines=[`热点剩余 ${Math.ceil(state.remaining_seconds/60)} 分钟`,state.online?'Wi-Fi 已连接':state.wifi_error?'Wi-Fi 初始化失败，请查看 Luna 屏幕并向维护者提供状态码':'等待 Wi-Fi 连接，请检查名称、密码及 2.4 GHz 网络'];
- if(ours&&state.state===1)lines.push('正在保存，请勿断电…');
- if(ours&&state.state===4){lines.push('保存失败，原有设置仍保留。');pending=false;uncertain=false;}
- if(saved){lines.push('设置已保存到设备。');lines.push(state.weather_fresh?'最新天气已就绪。':'等待设备校时和最新天气。');$('password').value='';}
+ if(trialId&&state.trial_id===trialId){
+  if(state.trial_state===2){
+   trialPending=false;
+   if(!requestId)feedback('connectStatus',state.online?'连接成功，可以选择天气地点。':'Wi-Fi 连接已断开，请检查网络后重新连接。',state.online?'success':'failure',true);
+  }else if(state.trial_state===3){
+   trialPending=false;
+   feedback('connectStatus',state.trial_error===263?'连接失败：等待联网超时，请检查名称、密码和 2.4 GHz 网络后重试。':'连接失败，请检查网络信息后重试。','failure',true);
+  }else if(state.trial_state===1){
+   feedback('connectStatus','正在连接 Wi-Fi，请保持手机连接 Luna 热点…');
+  }
+ }
+ let lines=[`热点剩余 ${Math.ceil(state.remaining_seconds/60)} 分钟`,trialPending?'正在连接所选 Wi-Fi…':state.online?'Wi-Fi 已连接':state.wifi_error?'Wi-Fi 初始化失败，请查看 Luna 屏幕并向维护者提供状态码':'等待 Wi-Fi 连接，请检查名称、密码及 2.4 GHz 网络'];
+ if(ours&&state.state===1){lines.push('正在保存，请勿断电…');feedback('saveStatus','正在保存到 Luna，请勿断电…');}
+ if(ours&&state.state===4){lines.push('保存失败，原有设置仍保留。');pending=false;uncertain=false;feedback('saveStatus','保存失败，原有设置仍保留，请重试。','failure',true);}
+ if(saved){lines.push('设置已保存到设备。');lines.push(state.weather_fresh?'最新天气已就绪。':'等待设备校时和最新天气。');$('password').value='';feedback('saveStatus',state.state===3?'保存成功，但 Wi-Fi 初始化失败，请查看 Luna 屏幕。':'保存成功！Wi-Fi 与地点已保存到 Luna，断电后仍会保留。','success',true);notice('');}
  else if(state.online&&!state.clock_ready)lines.push('正在联网校时，请稍候再搜索城市；也可手填经纬度。');
  if(ours&&state.state===3)lines.push('设置已保存，但无线初始化失败，尚未联网。');
  $('status').textContent=lines.join('\n');
  if(ours&&state.state!==1){pending=false;uncertain=false;}
  await pollScan();
- $('find').disabled=!state.online||!state.clock_ready||pending||scanning;
- $('connect').disabled=pending||saved||uncertain||scanning;
- $('save').disabled=pending||saved||uncertain||scanning;
- $('scan').disabled=pending||saved||uncertain||scanning;
- $('networks').disabled=pending||saved||uncertain||scanning;
- }catch(error){$('status').textContent=saved?'配置已保存；热点可能已自动关闭。请让手机重新连接原 Wi-Fi，观察 Luna 天气。':'暂时无法读取状态，请保持连接 Luna 热点。若刚发送保存，请勿重复提交；恢复连接后先等待读取状态。';}
+ $('find').disabled=!state.online||!state.clock_ready||busy();
+ controls();
+ }catch(error){$('status').textContent=saved?'配置已保存；热点可能已自动关闭。请让手机重新连接原 Wi-Fi，观察 Luna 天气。':'暂时无法读取状态，请保持连接 Luna 热点。若刚发送保存，请勿重复提交；恢复连接后先等待读取状态。';
+  if(trialPending)feedback('connectStatus','连接结果正在确认，请保持热点连接，暂勿重复提交。');
+  if(uncertain&&!saved)feedback('saveStatus','保存结果正在确认，请保持热点连接，暂勿重复提交。');
+ }
  finally{polling=false;}
 }
 $('scan').addEventListener('click',async()=>{
- if(pending||saved||uncertain||scanning)return;
+ if(busy())return;
  scanning=true;scanUntil=Date.now()+30000;$('scan').disabled=true;$('connect').disabled=true;$('save').disabled=true;
- $('networks').disabled=true;$('scan').textContent='正在扫描…';$('scanStatus').textContent='Luna 正在扫描附近网络，请保持热点连接…';
- networks=[];$('networks').replaceChildren(new Option('请选择网络',''));$('networksLabel').hidden=true;
+ controls();$('scan').textContent='正在扫描…';$('scanStatus').textContent='Luna 正在扫描附近网络，请保持热点连接…';
+ networks=[];$('networks').replaceChildren();$('networksLabel').hidden=true;
  try{await api('/api/scan',{});await poll();}
  catch(error){if(error.status){scanning=false;$('scan').textContent='重新扫描 Wi-Fi';$('scanStatus').textContent='设备忙，请稍等几秒重新扫描；也可手动输入名称。';}else{$('scanStatus').textContent='请求结果未确认，正在查询扫描状态，请保持热点连接…';}await poll();}
 });
-$('networks').addEventListener('change',()=>{
- if(pending||saved||uncertain||scanning)return;
- const index=$('networks').value,wifi=networks[Number(index)];
- if(index!==''&&wifi){$('ssid').value=wifi.ssid;$('password').value='';$('password').placeholder=wifi.secured?'请输入这个 Wi-Fi 的密码':'此网络无需密码';$('password').focus();}
+$('networks').addEventListener('click',event=>{
+ if(busy())return;
+ const row=event.target.closest('button[data-index]');if(!row)return;
+ const wifi=networks[Number(row.dataset.index)];if(!wifi)return;
+ resetTrial();
+ for(const item of $('networks').children)item.setAttribute('aria-pressed',String(item===row));
+ $('ssid').value=wifi.ssid;$('password').value='';$('password').placeholder=wifi.secured?'请输入这个 Wi-Fi 的密码':'此网络无需密码';
+ if(wifi.secured)$('password').focus();
 });
+for(const id of ['ssid','password'])$(id).addEventListener('input',()=>{if(!busy()){resetTrial();for(const row of $('networks').children)row.setAttribute('aria-pressed','false');}});
 $('network').addEventListener('submit',async event=>{
- event.preventDefault();if(pending||saved||uncertain||scanning)return;
- try{const fields=networkFields();if(!fields.password&&!confirm('确认连接无密码的开放网络？'))return;pending=true;$('connect').disabled=true;notice('');await api('/api/network',fields);notice('正在试连。请保持手机连接 Luna，然后选择天气地点。');}
- catch(error){notice('试连未确认，请先观察连接状态。'+error.message);}
- finally{pending=false;await poll();}
+ event.preventDefault();if(busy())return;
+ let sent=false;
+ try{const fields=networkFields();if(!fields.password&&!confirm('确认连接无密码的开放网络？'))return;
+  trialId=newId();trialPending=true;requestId='';controls();notice('');
+  feedback('connectStatus','正在连接 Wi-Fi，请保持手机连接 Luna 热点…','pending',true);
+  sent=true;await api('/api/network',{setup_id:trialId,...fields});
+ }catch(error){
+  if(!sent||[400,403,503].includes(error.status)){trialPending=false;trialId='';feedback('connectStatus','连接失败：'+error.message,'failure',true);}
+  else{feedback('connectStatus','连接结果正在确认，请保持热点连接，暂勿重复提交。','pending',true);}
+ }
+ finally{controls();await poll();}
 });
 $('search').addEventListener('submit',async event=>{
- event.preventDefault();$('find').disabled=true;notice('');
+ event.preventDefault();if(busy())return;$('find').disabled=true;notice('');
  try{const result=await api('/api/cities',{query:$('query').value.trim()});cities=result.results||[];$('choices').replaceChildren(new Option('请选择地点',''));
  cities.forEach((city,i)=>$('choices').add(new Option([city.name,city.admin1,city.country].filter(Boolean).join(' · '),String(i))));$('choicesLabel').hidden=false;if(!cities.length)notice('没有找到地点，试试拼音，或手动填写经纬度。');}
  catch(error){notice(error.message+' 可改用拼音或手动填写经纬度。');}
@@ -104,17 +150,22 @@ $('search').addEventListener('submit',async event=>{
 });
 $('choices').addEventListener('change',()=>{const city=cities[Number($('choices').value)];if($('choices').value!==''&&city){$('location').value=city.name;$('latitude').value=city.latitude;$('longitude').value=city.longitude;}});
 $('save').addEventListener('click',async()=>{
- if(pending||saved||uncertain||scanning)return;
+ if(busy())return;
+ let sent=false;
  try{
  const fields=networkFields(),location=$('location').value.trim();
  if(!location||byteLength(location)>47||!$('latitude').value.trim()||!$('longitude').value.trim())throw Error('请先选择地点，或完整填写地点与经纬度。');
  const latitude=Number($('latitude').value),longitude=Number($('longitude').value);
  if(!Number.isFinite(latitude)||Math.abs(latitude)>90||!Number.isFinite(longitude)||Math.abs(longitude)>180)throw Error('经纬度范围不正确。');
  if(!fields.password&&!confirm('将保存开放 Wi-Fi。确认继续？'))return;
- requestId=newId();pending=true;uncertain=true;$('save').disabled=true;notice('');
+ requestId=newId();pending=true;uncertain=true;controls();notice('');
+ feedback('saveStatus','正在保存到 Luna，请勿断电…','pending',true);sent=true;
  await api('/api/save',{setup_id:requestId,...fields,location,latitude,longitude});
- }catch(error){if(error.status===400||error.status===503){requestId='';pending=false;uncertain=false;}notice('保存未确认：'+error.message+' 若已发送，先等待读取设备状态，不要重复提交。');}
- finally{if(!requestId){pending=false;uncertain=false;}await poll();}
+ }catch(error){
+  if(!sent||[400,403,503].includes(error.status)){requestId='';pending=false;uncertain=false;feedback('saveStatus','保存失败：'+error.message,'failure',true);notice(error.message);}
+  else{feedback('saveStatus','保存结果正在确认，请保持热点连接，暂勿重复提交。','pending',true);notice('保存未确认：'+error.message+' 若已发送，先等待读取设备状态，不要重复提交。');}
+ }
+ finally{if(!requestId){pending=false;uncertain=false;}controls();await poll();}
 });
 $('close').addEventListener('click',async()=>{try{await api('/api/close',{});notice('正在关闭热点。未保存的试连设置将恢复为原配置。');}catch(error){notice('热点可能已关闭，请观察 Luna。');}});
 (async()=>{try{const session=await api('/api/session');token=session.token;$('connect').disabled=false;$('save').disabled=false;$('close').disabled=false;await poll();setInterval(poll,2000);}catch(error){notice('请连接 Luna 热点，在浏览器打开 http://192.168.4.1。');}})();

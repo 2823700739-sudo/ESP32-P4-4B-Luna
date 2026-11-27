@@ -19,7 +19,7 @@ async function main() {
       timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce' });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.clock.setFixedTime(new Date('2026-10-08T20:08:00+08:00'));
+    await page.clock.setFixedTime(new Date('2026-11-27T20:08:00+08:00'));
     await page.goto(base);
     await page.locator('#digital-hm').waitFor();
     await page.evaluate(() => document.fonts.ready);
@@ -38,6 +38,11 @@ async function main() {
         await capture('music-volume');
       }
     }
+    await page.getByRole('button', { name: '专注卡', exact: true }).click();
+    await capture('focus');
+    await page.locator('#focus-custom').click();
+    await capture('focus-keyboard');
+    await page.locator('[data-focus-cancel]').last().click();
     await page.locator('#display').click({ position: { x: 360, y: 100 } });
     await page.locator('#idle-screen').waitFor({ state: 'visible' });
     await capture('standby');

@@ -1,5 +1,5 @@
 // Preview-only state. No BLE, media, sensors, or PC-agent calls are made here.
-export const CARDS = Object.freeze(['clock', 'music', 'weather', 'codex', 'computer']);
+export const CARDS = Object.freeze(['clock', 'music', 'weather', 'codex', 'computer', 'focus']);
 export const SCENARIOS = Object.freeze(['normal', 'offline', 'empty', 'stale', 'partial', 'long', 'ble-off', 'wifi-off']);
 export const IDLE_MS = 180000;
 export function clockAngles(date) {
@@ -53,6 +53,29 @@ export function demoSnapshot(scenario = 'normal') {
   };
 }
 
+export class FocusTimer {
+  constructor(){this.minutes=25;this.end();}
+  end(){this.state='idle';this.leftMs=this.minutes*60000;this.deadline=0;this.notice=false;}
+  select(minutes){
+    if(!Number.isInteger(minutes)||minutes<1||minutes>999||['running','paused'].includes(this.state))return false;
+    this.minutes=minutes;this.end();return true;
+  }
+  start(now){
+    if(this.state==='running')return false;
+    if(this.state!=='paused')this.leftMs=this.minutes*60000;
+    this.deadline=now+this.leftMs;this.state='running';this.notice=false;return true;
+  }
+  tick(now){
+    if(this.state!=='running'||now<this.deadline)return false;
+    this.leftMs=0;this.state='done';this.notice=true;return true;
+  }
+  pause(now){
+    this.tick(now);if(this.state!=='running')return false;
+    this.leftMs=this.deadline-now;this.state='paused';return true;
+  }
+  remaining(now){return Math.min(this.minutes*60,Math.max(0,Math.ceil((this.state==='running'?this.deadline-now:this.leftMs)/1000)));}
+}
+
 export class PreviewModel {
   constructor(now = 0) {
     this.card = 'clock';
@@ -67,29 +90,39 @@ export class PreviewModel {
     this.petResponseUntil = 0;
     this.actions = 0;
     this.idle = false;
+    this.focus = new FocusTimer();
+    this.focusEditing = false;
   }
   get data() { return demoSnapshot(this.scenario); }
   get canControl() { const d = this.data; return d.pc && !d.stale && d.music.available; }
+  get musicPlaying() { const d=this.data; return this.playing && d.pc && !d.stale && d.music.available; }
   setScenario(value) { if (SCENARIOS.includes(value)) this.scenario = value; }
   touch(now) {
     this.lastTouch = now;
     if (this.idle) { this.idle=false; return 'wake'; }
     return 'active';
   }
-  enterIdle() { this.idle=true; this.volumeOpen=false; this.dragging=false; }
-  tick(now) { if(!this.idle&&!this.dragging&&now-this.lastTouch>=IDLE_MS) this.enterIdle(); }
+  enterIdle() { if(this.focusEditing||this.focus.state==='running')return false;this.idle=true; this.volumeOpen=false; this.dragging=false;return true; }
+  tick(now) { if(this.focus.tick(now))this.lastTouch=now;if(!this.idle&&!this.dragging&&now-this.lastTouch>=IDLE_MS) this.enterIdle(); }
+  openFocusEditor(){if(this.idle||['running','paused'].includes(this.focus.state))return false;this.focusEditing=true;this.volumeOpen=false;return true;}
+  closeFocusEditor(now){this.focusEditing=false;this.lastTouch=now;}
+  setFocusMinutes(minutes,now){if(!this.focusEditing||!this.focus.select(minutes))return false;this.closeFocusEditor(now);return true;}
   navigate(delta) {
+    if(this.focusEditing)return false;
     const i = CARDS.indexOf(this.card);
-    this.card = CARDS[(i + delta % CARDS.length + CARDS.length) % CARDS.length];
-    this.volumeOpen = false;
+    this.chooseCard(CARDS[(i + delta % CARDS.length + CARDS.length) % CARDS.length]);
     return true;
   }
-  chooseCard(card) { if (CARDS.includes(card)) { this.card = card; this.volumeOpen = false; } }
+  chooseCard(card) { if (!this.focusEditing&&CARDS.includes(card)) { this.card = card; this.volumeOpen = false;if(card==='focus')this.focus.notice=false; } }
   command(action, value) {
-    if(this.idle) return false;
+    if(this.idle||this.focusEditing) return false;
     // Outside clicks close the popup AND still execute the intended action.
     if (!['volume-set','mute'].includes(action)) this.volumeOpen = false;
     if (action === 'pet') { this.petResponseUntil = value + 1600; return true; }
+    if(action==='focus-start')return this.focus.start(value);
+    if(action==='focus-pause')return this.focus.pause(value);
+    if(action==='focus-end'){this.focus.end();return true;}
+    if(/^focus-(25|45|60)$/.test(action))return this.focus.select(Number(action.slice(6)));
     if (!this.canControl) return false;
     switch (action) {
       case 'toggle': this.playing = !this.playing; break;

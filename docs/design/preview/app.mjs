@@ -12,8 +12,8 @@ document.getElementById('clock-ticks').innerHTML=Array.from({length:60},(_,i)=>{
   const a=i*Math.PI/30,r=i%5?194:183;
   return `<line x1="${220+r*Math.sin(a)}" y1="${220-r*Math.cos(a)}" x2="${220+202*Math.sin(a)}" y2="${220-202*Math.cos(a)}" stroke="${i%5?'#596b85':'#b8a2ff'}" stroke-width="${i%5?2:4}"/>`;
 }).join('');
-const LABELS = { clock:'时钟', music:'音乐', weather:'天气', codex:'额度', computer:'电脑' };
-const ICONS = { clock:'clock', music:'play', weather:'weather', codex:'code', computer:'computer' };
+const LABELS = { clock:'时钟', music:'音乐', weather:'天气', codex:'额度', computer:'电脑', focus:'专注' };
+const ICONS = { clock:'clock', music:'play', weather:'weather', codex:'code', computer:'computer', focus:'moon' };
 const tracks = ['在月光下漫步', '像素宇宙', '晚安，Luna'];
 const icon = (name, cls = '') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 const esc = text => String(text).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -35,7 +35,8 @@ function clockCard(d) {
 }
 function musicCard(d) {
   const title = d.music.available ? (model.scenario === 'long' ? d.music.title : tracks[model.trackIndex]) : '等待音乐';
-  return header('MUSIC', 'play', notes(d)) + `<div class="music-main"><div class="record ${model.playing && model.canControl ? 'playing' : ''}">${icon('moon')}</div><div class="track-text"><div class="track-caption">LUNA / FIXED PLAYER</div><h2 class="track-title" title="${esc(title)}">${esc(title)}</h2><div class="track-artist" title="${esc(d.music.artist)}">${d.music.available ? esc(d.music.artist) : '连接电脑，打开音乐播放器'}</div></div></div><div class="music-controls"><button class="media-button" data-action="previous" aria-label="上一首" ${model.canControl ? '' : 'disabled'}>${icon('prev')}</button><button class="media-button play-button" data-action="toggle" aria-label="${model.playing ? '暂停' : '播放'}" ${model.canControl ? '' : 'disabled'}>${icon(model.playing ? 'pause' : 'play', model.playing ? '' : 'filled-play')}</button><button class="media-button" data-action="next" aria-label="下一首" ${model.canControl ? '' : 'disabled'}>${icon('next')}</button></div><div class="card-bottom music-bottom"><button class="volume-button" data-action="volume-open" aria-label="展开系统音量" ${model.canControl ? '' : 'disabled'}>${icon(model.muted ? 'mute' : 'volume')}</button></div>`;
+  const deck=`<div class="record-deck" data-playing="${model.musicPlaying}"><div class="record ${model.musicPlaying?'playing':''}">${icon('moon')}</div><svg class="tonearm" viewBox="0 0 220 250" aria-hidden="true"><g class="arm"><polyline points="183,76 171,130 149,154" fill="none" stroke="#d3dced" stroke-width="4"/><line x1="156" y1="146" x2="146" y2="157" stroke="#ffbc82" stroke-width="9"/></g><circle cx="183" cy="76" r="9" fill="#101521" stroke="#50617c" stroke-width="2"/><circle cx="183" cy="76" r="3" fill="#ffbc82"/></svg></div>`;
+  return header('MUSIC', 'play', notes(d)) + `<div class="music-main">${deck}<div class="track-text"><div class="track-caption">LUNA / FIXED PLAYER</div><h2 class="track-title" title="${esc(title)}">${esc(title)}</h2><div class="track-artist" title="${esc(d.music.artist)}">${d.music.available ? esc(d.music.artist) : '连接电脑，打开音乐播放器'}</div></div></div><div class="music-controls"><button class="media-button" data-action="previous" aria-label="上一首" ${model.canControl ? '' : 'disabled'}>${icon('prev')}</button><button class="media-button play-button" data-action="toggle" aria-label="${model.playing ? '暂停' : '播放'}" ${model.canControl ? '' : 'disabled'}>${icon(model.playing ? 'pause' : 'play', model.playing ? '' : 'filled-play')}</button><button class="media-button" data-action="next" aria-label="下一首" ${model.canControl ? '' : 'disabled'}>${icon('next')}</button></div><div class="card-bottom music-bottom"><button class="volume-button" data-action="volume-open" aria-label="展开系统音量" ${model.canControl ? '' : 'disabled'}>${icon(model.muted ? 'mute' : 'volume')}</button></div>`;
 }
 function weatherCard(d) {
   const w = d.weather;
@@ -53,21 +54,33 @@ function computerCard(d) {
   const c = d.computer;
   return header('COMPUTER', 'computer', notes(d)) + `<div class="computer-name" title="${esc(c.name)}">${esc(c.name)}</div><div class="gauges">${gauge(c.cpu,c.cpuTemp,'CPU')}${gauge(c.gpu,c.gpuTemp,'GPU','gpu')}</div><div class="memory-section"><div class="memory-row"><div class="memory-label"><span>内存</span><span>${c.ram === null ? '不可用' : `${c.ramLabel} · ${pct(c.ram)}`}</span></div>${progress(c.ram,'内存使用率')}</div><div class="memory-row"><div class="memory-label"><span>显存</span><span>${c.vram === null ? '不可用' : `${c.vramLabel} · ${pct(c.vram)}`}</span></div>${progress(c.vram,'显存使用率')}</div></div>` + bottom(c.available ? '采样口径与硬件支持待实测' : '等待电脑状态', '示例 · 非本机读数', d.stale);
 }
-const renderers = { clock:clockCard, music:musicCard, weather:weatherCard, codex:quotaCard, computer:computerCard };
+function focusCard(){
+  return header('FOCUS','moon','')+`<div id="focus-status">准备专注</div><div class="focus-digital"><div id="focus-hint">剩余专注时间</div><div id="focus-time" role="timer" aria-live="off">25:00</div><div class="focus-track"><div id="focus-progress"></div></div></div><div class="focus-presets">${[25,45,60].map(minutes=>`<button data-action="focus-${minutes}" data-minutes="${minutes}" aria-pressed="false">${minutes} 分钟</button>`).join('')}<button id="focus-custom" data-action="focus-custom">自定义</button></div><div class="focus-controls"><button id="focus-toggle" data-action="focus-start">开始</button><button data-action="focus-end">结束</button></div>`;
+}
+const renderers = { clock:clockCard, music:musicCard, weather:weatherCard, codex:quotaCard, computer:computerCard, focus:focusCard };
 
 const nav = document.getElementById('card-nav');
 nav.innerHTML = CARDS.map(key => `<button class="nav-item" data-card="${key}" aria-label="${LABELS[key]}卡" aria-current="${key === model.card}">${icon(ICONS[key])}<span>${LABELS[key]}</span></button>`).join('');
 function renderCard(direction = 0) {
   const d = model.data;
+  const deck=model.card==='music' && card.dataset.card==='music'?card.querySelector('.record-deck'):null;
   card.dataset.card = model.card;
   card.classList.toggle('data-stale', d.stale && ['music','codex','computer'].includes(model.card));
-  card.innerHTML = renderers[model.card](d);
+  if(deck){
+    /* Keep the deck connected: detaching it cancels CSS transitions and
+       restarts the record even when the same DOM node is reinserted. */
+    const fresh=document.createElement('template');fresh.innerHTML=renderers[model.card](d);
+    for(const selector of ['.card-header','.track-text','.music-controls','.music-bottom'])
+      card.querySelector(selector).replaceWith(fresh.content.querySelector(selector));
+    deck.dataset.playing=String(model.musicPlaying);
+    deck.querySelector('.record').classList.toggle('playing',model.musicPlaying);
+  }else card.innerHTML = renderers[model.card](d);
   if (direction) {
     card.style.setProperty('--slide', `${direction > 0 ? 26 : -26}px`);
     card.classList.remove('card-animate'); void card.offsetWidth; card.classList.add('card-animate');
   }
   for (const item of nav.children) item.setAttribute('aria-current', item.dataset.card === model.card ? 'true' : 'false');
-  syncChrome(); tickClock();
+  syncChrome(); tickClock();paintFocus(performance.now());
 }
 function syncChrome() {
   const d = model.data;
@@ -114,6 +127,7 @@ let swipe = null;
 let petPress = null;
 let wakePointer=null,suppressClickUntil=0;
 root.addEventListener('pointerdown', event => {
+  if(model.focusEditing)return;
   if(model.touch(performance.now())==='wake') {
     wakePointer=event.pointerId;suppressClickUntil=performance.now()+1000;syncChrome();
     event.preventDefault();event.stopImmediatePropagation();return;
@@ -157,10 +171,12 @@ window.addEventListener('pointerup', () => { petPress = null; if (model.dragging
 window.addEventListener('pointercancel', () => { petPress = null; if (model.dragging) model.endDrag(performance.now()); },true);
 pet.addEventListener('lostpointercapture', () => { petPress = null; });
 root.addEventListener('click', event => {
+  if(model.focusEditing){handleFocusEditor(event);return;}
   if(performance.now()<suppressClickUntil||model.idle){event.preventDefault();event.stopImmediatePropagation();return;}
   model.touch(performance.now());
   const button = event.target instanceof Element ? event.target.closest('button') : null;
   if (!button || button.disabled) return;
+  if(button.dataset.action==='focus-custom'){openFocusEditor();return;}
   if (button.dataset.action) { model.command(button.dataset.action,performance.now()); renderCard(); }
   else if (button.dataset.card) { model.chooseCard(button.dataset.card); renderCard(1); }
   else if (button.id === 'next-card') navigate(1);
@@ -168,6 +184,7 @@ root.addEventListener('click', event => {
   else if (button.id === 'pet') { const now=performance.now(); model.command('pet',now); syncChrome(); paintPet(now,0); }
 }, true);
 root.addEventListener('keydown', event => {
+  if(model.focusEditing){focusEditorKey(event);return;}
   if (!['ArrowLeft','ArrowRight','Enter',' '].includes(event.key) || event.target.closest('input,select')) return;
   if(model.touch(performance.now())==='wake'){event.preventDefault();syncChrome();return;}
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); navigate(event.key === 'ArrowLeft' ? -1 : 1); }
@@ -188,6 +205,7 @@ function animate() {
   const now = performance.now();
   const dt = Math.max(0,Math.min(100,now-lastFrame)); lastFrame = now;
   const wasIdle=model.idle;model.tick(now);if(wasIdle!==model.idle)syncChrome();
+  paintFocus(now);
   if (Math.floor(now/1000) !== lastSecond) {
     lastSecond = Math.floor(now/1000); tickClock();
   }
@@ -210,14 +228,75 @@ function paintPet(now,dt) {
   pet.dataset.motion = responding ? 'response' : petPress !== null ? 'pressed' : reducedMotion.matches || resting ? 'rest' : 'walk';
   const position = reducedMotion.matches ? {x:590,y:596,left:false} : motion.position;
   pet.style.left = `${position.x}px`; pet.style.top = `${position.y}px`;
-  bubble.hidden = !responding;
-  if(responding) {
+  bubble.hidden = model.focusEditing||(!responding&&!model.focus.notice);
+  bubble.style.width=model.focus.notice?'104px':'64px';
+  bubble.textContent=model.focus.notice?'休息一下':'喵～';
+  if(responding||model.focus.notice) {
     const bx=Math.max(8,Math.min(720-8-bubble.offsetWidth,position.x+6));
     bubble.style.left=`${bx-position.x}px`;
   }
   const frame = responding ? 4+(Math.floor(now/350)%2) : reducedMotion.matches || resting ? (Math.floor(now/900)%7 === 0 ? 1 : 0) : 2+(Math.floor(now/220)%2);
   sprite.style.backgroundPosition = `${-(frame%4)*72}px ${-Math.floor(frame/4)*72}px`;
   sprite.style.transform = position.left && frame < 4 ? 'scaleX(-1)' : '';
+}
+function paintFocus(now){
+  const f=model.focus,remaining=f.remaining(now),busy=['running','paused'].includes(f.state);
+  const marker=document.querySelector('[data-card="focus"].nav-item');
+  const badge=f.notice?'done':busy?f.state:'idle';if(marker.dataset.timer!==badge)marker.dataset.timer=badge;
+  document.getElementById('focus-notice').hidden=!(model.idle&&f.notice);
+  if(model.card!=='focus'||model.idle)return;
+  const setText=(id,text)=>{const node=document.getElementById(id);if(node.textContent!==text)node.textContent=text;};
+  setText('focus-time',`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`);
+  setText('focus-status',{idle:'准备专注',running:'专注中',paused:'已暂停',done:'专注完成'}[f.state]);
+  setText('focus-hint','剩余专注时间');
+  const progress=document.getElementById('focus-progress');progress.style.width=`${100*remaining/(f.minutes*60)}%`;
+  for(const preset of document.querySelectorAll('.focus-presets [data-minutes]')){
+    preset.disabled=busy;preset.setAttribute('aria-pressed',String(Number(preset.dataset.minutes)===f.minutes));
+  }
+  const custom=document.getElementById('focus-custom');custom.disabled=busy;
+  const isCustom=![25,45,60].includes(f.minutes);custom.setAttribute('aria-pressed',String(isCustom));
+  custom.textContent=isCustom?`自定义 · ${f.minutes} 分`:'自定义';
+  const start=document.getElementById('focus-toggle');start.dataset.action=f.state==='running'?'focus-pause':'focus-start';
+  start.textContent={idle:'开始',running:'暂停',paused:'继续',done:'再来一轮'}[f.state];
+  document.querySelector('[data-action="focus-end"]').disabled=f.state==='idle';
+}
+const focusEditor=document.getElementById('focus-editor'),focusInput=document.getElementById('focus-minutes');
+let focusReplace=true;
+document.querySelector('.focus-key-grid').innerHTML=['1','2','3','4','5','6','7','8','9','清空','0','退格'].map(key=>`<button data-focus-key="${key}" aria-label="${key}">${key==='退格'?'⌫':key}</button>`).join('');
+function syncFocusEditor(){
+  focusEditor.hidden=!model.focusEditing;
+  for(const child of root.children)if(child!==focusEditor)child.inert=model.focusEditing;
+}
+function openFocusEditor(){
+  if(!model.openFocusEditor())return;
+  focusInput.value=String(model.focus.minutes);focusReplace=true;
+  document.getElementById('focus-editor-error').textContent='';swipe=null;petPress=null;model.dragging=false;
+  syncFocusEditor();
+}
+function editFocusKey(key){
+  if(key==='清空')focusInput.value='';
+  else if(key==='退格')focusInput.value=focusInput.value.slice(0,-1);
+  else if(/^\d$/.test(key))focusInput.value=((focusReplace?'':focusInput.value)+key).slice(0,3);
+  focusReplace=false;document.getElementById('focus-editor-error').textContent='';
+}
+function confirmFocusMinutes(){
+  if(!model.setFocusMinutes(Number(focusInput.value),performance.now())){document.getElementById('focus-editor-error').textContent='请输入 1-999 分钟';return;}
+  syncFocusEditor();renderCard();
+}
+function handleFocusEditor(event){
+  const button=event.target.closest('button');event.stopImmediatePropagation();
+  if(!button)return;
+  if(button.hasAttribute('data-focus-key'))editFocusKey(button.dataset.focusKey);
+  else if(button.hasAttribute('data-focus-cancel')){model.closeFocusEditor(performance.now());syncFocusEditor();}
+  else if(button.hasAttribute('data-focus-confirm'))confirmFocusMinutes();
+}
+function focusEditorKey(event){
+  if(event.key==='Tab')return;
+  event.preventDefault();event.stopImmediatePropagation();
+  if(/^\d$/.test(event.key))editFocusKey(event.key);
+  else if(event.key==='Backspace')editFocusKey('退格');
+  else if(event.key==='Escape'){model.closeFocusEditor(performance.now());syncFocusEditor();}
+  else if(event.key==='Enter')confirmFocusMinutes();
 }
 new ResizeObserver(entries => { root.style.transform = `scale(${entries[0].contentRect.width / 720})`; }).observe(root.parentElement);
 renderCard(); paintPet(performance.now(),0); requestAnimationFrame(animate);

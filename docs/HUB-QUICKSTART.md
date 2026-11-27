@@ -2,13 +2,22 @@
 
 适用硬件：Waveshare **ESP32-P4-WIFI6-Touch-LCD-4B**，P4 rev1.x / 32 MB，板载 C6 已有兼容固件。
 
-手机设置候选 **2026.11.26-phone-http**：烧录后保持供电 → 手机直接连接屏幕显示的 Luna 无密码热点 → 浏览器打开 **http://192.168.4.1** → 点击“扫描 Wi-Fi”、选家中网络并输入密码 → 连接、选城市并保存。时钟和天气不需要电脑脚本，完整说明见 [手机设置](PHONE-SETUP.md)。旧公开版没有此入口，实际验收状态见候选 manifest。
+**2026.11.27 定版**（应用内版本 `2026.11.27-focus-align`）。[下载固件及使用包](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/releases/tag/v2026.11.27)。
+
+## 烧录与手机设置
+
+1. 核对板型、P4 rev1.x / 32 MB 和已有兼容 C6 固件。首次安装将 **luna-first-install-0x0.bin** 烧录到 **0x0**；DIO、80 MHz、32 MB。先核对随包 SHA256SUMS。合并镜像会清除原有 Wi-Fi、配对、城市和缓存；已有相同分区的 Luna 保留数据升级用 app-only `luna-panel.bin` → **0x20000**。地址与排障见[完整部署教程](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/blob/main/docs/DEPLOYMENT.md)。不需要刷 C6。
+2. 重启并保持 DC 供电，手机连接屏幕显示的 Luna 无密码热点，浏览器打开 **http://192.168.4.1**。热点临时开放，配置时在设备附近操作。
+3. 点击“扫描 Wi-Fi”，在逐行列表中点选家中 **2.4 GHz** 网络、输入密码并连接。等待按钮附近显示“连接成功”；失败或正在确认时按页面提示处理。
+4. 选择城市或填写经纬度，保存到 Luna，等待“保存成功”。连接成功与地点保存是两步；保存失败时可重试。详见[手机设置](PHONE-SETUP.md)。
+
+时钟、天气与专注不需要电脑脚本。专注提供 25／45／60 分钟及绿色键盘 **1–999 分钟**自定义；运行时不进时钟待机，暂停允许，结束时原行走猫提醒。自定义弹窗会拦住底层操作，计时不跨重启保存，详见[专注说明](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/blob/main/docs/FOCUS.md)。
 
 ## 需要电脑相关功能时
 
 电脑需要 **Windows 11 x64、蓝牙和 Python 3.11 x64**。仅音乐/系统音量、电脑指标、工程与 Codex 额度需以下 Agent：
 
-1. **烧录固件。** 首次安装将 `luna-first-install-0x0.bin` 烧录到 **0x0**，完成后重启并保持 DC 供电。该文件会清除原有配对与天气缓存；已有 Luna 保留数据升级请使用 [完整教程](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/blob/codex/phone-wifi-setup/docs/DEPLOYMENT.md) 的 app-only 方法。不需要刷 C6。
+1. **保持设备供电。** 完成上方烧录与手机设置，准备 Windows 蓝牙。
 2. **配对蓝牙。** 在 Windows“设置 → 蓝牙和设备 → 添加设备”中选择 **Luna**，核对电脑与屏幕的数字一致后分别确认。“已配对”但暂时“未连接”时继续下一步。
 3. **双击启动。** 将随附的 Windows 使用包完整解压到一个固定文件夹，安装 [Python 3.11 x64](https://www.python.org/downloads/windows/)（保留 Python Launcher），双击根目录 **Start-Luna.cmd**。首次会联网安装依赖，随后启动 Agent，并设置当前用户登录后自动运行；不需要管理员权限。以后不要移动这个文件夹，也不要重复运行其他位置的副本。
 

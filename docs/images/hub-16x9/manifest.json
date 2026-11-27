@@ -1,0 +1,77 @@
+{
+  "source": "docs/design/preview/",
+  "kind": "website preview, demo data; not hardware photos",
+  "uiChanged": false,
+  "images": [
+    {
+      "file": "00-cover.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 574477,
+      "sha256": "074140498e786e0f9fa2a2f2f428de3987e7bbc8d8a1acaf6ffc87b1e552ccfe"
+    },
+    {
+      "file": "01-clock.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 565499,
+      "sha256": "0e7a41dbc88d10f2a52d1ccad5446e238c8ecbacdceb7f09d486efa6bd6bc18c"
+    },
+    {
+      "file": "02-music.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 575868,
+      "sha256": "07614c79d7d353f956f78066af1c94b1446f3087a63ba69945cea553d14b97b7"
+    },
+    {
+      "file": "03-volume.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 602214,
+      "sha256": "5542a684ea9fc7b529ab77e7235e981835fd9cbe3ba14ab07c6b0c4b25f6d447"
+    },
+    {
+      "file": "04-weather.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 574076,
+      "sha256": "3dc2c5c1473d470e3c83cf001eaf4851a1aaec40d695912cebf9021046db13b8"
+    },
+    {
+      "file": "05-codex.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 554682,
+      "sha256": "8946dc9d0349f71540df3e13bc3c6de9a58dd5ea8016e87b49e4382a8b9aa6b8"
+    },
+    {
+      "file": "06-computer.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 573410,
+      "sha256": "fdfa9303d1e4da15bd1fa45674ed5203d134775fccd5134ce4e4228d021e37de"
+    },
+    {
+      "file": "07-focus.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 560904,
+      "sha256": "db156f5d857344cbae069de3603f5cc1260f8e8956b9298d47d038e1b3447ea5"
+    },
+    {
+      "file": "08-focus-keyboard.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 507967,
+      "sha256": "10909269292a69393e142a8d93e37d392351003def072961c3b72884b88c62e2"
+    },
+    {
+      "file": "09-standby.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 586609,
+      "sha256": "d71cdaab9a75a949be9070a5c36aefc16e7679b91c197f110f401ae4f4b25f79"
+    }
+  ]
+}

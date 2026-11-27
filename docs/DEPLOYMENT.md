@@ -1,12 +1,12 @@
 # Luna 部署教程
 
-本教程对应 **2026.11.26-phone-http**，位于 **codex/phone-wifi-setup** 新分支。首次安装用合并 bin 写 `0x0`；已有相同分区的 Luna 用 app 写 `0x20000`。随后按[手机教程](PHONE-SETUP.md)设置 Wi-Fi 和天气地点。只用时钟/天气无需运行电脑 Agent。
+本教程对应 **2026.11.27**，位于主分支 **main**，固定标签 **v2026.11.27**，应用内版本 **2026.11.27-focus-align**。首次安装用合并 bin 写 `0x0`；已有相同分区的 Luna 用 app 写 `0x20000`。随后按[手机教程](PHONE-SETUP.md)设置 Wi-Fi 和天气地点。只用时钟/天气/专注无需运行电脑 Agent。也可先看[快速部署](HUB-QUICKSTART.md)与[专注说明](FOCUS.md)。
 
 **中文** · [English](DEPLOYMENT.en.md) · [项目介绍](../README.md)
 
 公开镜像没有个人 Wi-Fi 名称、密码或设备 NVS 数据。设备网页支持扫描 Wi-Fi、输入密码、试连和天气地点配置；电脑脚本只提供电脑来源的数据和控制。
 
-推荐下载[本分支完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/codex/phone-wifi-setup.zip)。单独分发 bin 时同时附带 [LICENSE](../LICENSE)、[NOTICE](../NOTICE)、[第三方说明](../THIRD_PARTY_NOTICES.md)与完整 [LICENSES/](../LICENSES/) 目录。旧 `v2026.11.25-preview` 不含手机配置，请勿混用旧下载。
+推荐下载[主分支完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/main.zip)。单独分发 bin 时同时附带 [LICENSE](../LICENSE)、[NOTICE](../NOTICE)、[第三方说明](../THIRD_PARTY_NOTICES.md)与完整 [LICENSES/](../LICENSES/) 目录。旧 `v2026.11.25-preview` 不含手机配置，请勿混用旧下载。
 
 ## 1. 准备与适用范围
 
@@ -20,7 +20,7 @@ Python 可从 [Python 官方 Windows 下载页](https://www.python.org/downloads
 先下载本版完整仓库 ZIP 并解压，或：
 
 ```powershell
-git clone --depth 1 --branch codex/phone-wifi-setup https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch main https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 cd ESP32-P4-4B-Luna
 ```
 
@@ -28,19 +28,19 @@ cd ESP32-P4-4B-Luna
 
 ## 2. 文件与校验
 
-公开文件在 [固件目录](../firmware/releases/2026.11.26-phone-http/README.md)：
+公开文件在 [固件目录](../firmware/releases/2026.11.27/README.md)：
 
 | 文件 | 作用 | 写入地址 |
 | --- | --- | --- |
 | `luna-first-install-0x0.bin` | 首次安装单文件；覆盖 NVS / 配对，不能用于保留数据的升级 | `0x0` |
-| `luna-panel.bin` | 五卡 B1 app；已有 Luna 的正常升级使用它 | `0x20000` |
+| `luna-panel.bin` | 六卡 B1 app；已有 Luna 的正常升级使用它 | `0x20000` |
 | `bootloader.bin` | P4 启动程序；首次安装使用 | `0x2000` |
 | `partition-table.bin` | 10 MiB app 分区布局；首次安装使用 | `0x10000` |
 | `manifest.json` / `SHA256SUMS.txt` | 版本、硬件、地址、大小与 SHA-256 | 不刷写 |
 
 ```powershell
-Get-Content firmware/releases/2026.11.26-phone-http/SHA256SUMS.txt
-Get-FileHash firmware/releases/2026.11.26-phone-http/*.bin -Algorithm SHA256
+Get-Content firmware/releases/2026.11.27/SHA256SUMS.txt
+Get-FileHash firmware/releases/2026.11.27/*.bin -Algorithm SHA256
 ```
 
 所下载 bin 的哈希均应与校验文件一致。只下载 bin 与清单，不下载或刷写维护者的 NVS、配对、TF、私人配置和全片 Flash 备份。
@@ -71,14 +71,14 @@ py -3.11 -m venv .venv-flash
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x20000 firmware/releases/2026.11.26-phone-http/luna-panel.bin
+  0x20000 firmware/releases/2026.11.27/luna-panel.bin
 ```
 
 该命令只写 app，不写分区表、NVS、TF 或 C6。已有运行时保存的网络/地点继续保留；仅编译进旧 app 的密码不会自动继承，可通过[手机设置](PHONE-SETUP.md)重新配置。公开 app 不含维护者个人网络信息。
 
 ## 5. 首次安装：单个 bin 从 0x0 烧录
 
-本节只适用于**可清空的首次安装设备**。先核对板型、P4 **rev1.x**、32 MB Flash、B1 分区，以及板载 C6 已有兼容当前 ESP-Hosted / HCI 的固件。合并包只包含 P4 bootloader、分区表和 app，**不能初始化空白 C6**；C6 不兼容时停止，不随机刷写其他 C6 镜像。旧版本已在一块 P4 rev1.3 / 32 MB 设备完成合并首装、显示、数字配对、BLE 校时与真实电脑数据显示；本版在同板 app 升级后由作者确认 Wi-Fi 可用。本版合并首装、地点保存/断电重载、其他 C6 组合及长期运行未分别确认，详见清单。
+本节只适用于**可清空的首次安装设备**。先核对板型、P4 **rev1.x**、32 MB Flash、B1 分区，以及板载 C6 已有兼容当前 ESP-Hosted / HCI 的固件。合并包只包含 P4 bootloader、分区表和 app，**不能初始化空白 C6**；C6 不兼容时停止，不随机刷写其他 C6 镜像。旧版本已在一块 P4 rev1.3 / 32 MB 设备完成合并首装、显示、数字配对、BLE 校时与真实电脑数据显示；本版在同板 app-only 升级后，启动观察确认已有 NVS 网络恢复、NTP 与 HTTPS 天气正常，并已获用户整体定版确认。本版合并首装、地点保存/断电重载、其他 C6 组合及长期运行未分别确认，详见清单。
 
 **合并 raw bin 的间隙填充为 `0xFF`，从 `0x0` 写入会清除 `0x11000–0x16FFF` 的 NVS，包括已有 BLE 配对、天气地点和缓存；也覆盖 phy_init。已有 Luna 要保留这些数据，请使用第 4 节 app-only，不能使用合并包。** 即使不执行 `erase-flash`，这些间隙仍会被擦写，详见 [esptool RAW 格式说明](https://docs.espressif.com/projects/esptool/en/latest/esp32p4/esptool/basic-commands.html#raw-output-format)。
 
@@ -93,14 +93,14 @@ py -3.11 -m venv .venv-flash
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x0 firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin
+  0x0 firmware/releases/2026.11.27/luna-first-install-0x0.bin
 ```
 
 默认 115200 速率下，压缩数据传输仍可能需要约十分钟；进度正常时不要断电。需要加快且串口稳定时，可在 `--port COMx` 后添加 `--baud 460800`，本次备用板已用该速率完成写入及校验。
 
 文件已内置正确的 DIO / 80 MHz / 32 MB 参数。不需要在本地合并或安装 ESP-IDF。若使用已有的兼容 P4 下载工具，同样只勾选该文件、填 `0x0`；不要勾选整片擦除、不要改为 app 地址 `0x20000`。合并 raw 文件开头是填充字节，不能依赖工具从首字节自动校验所有内嵌镜像的芯片版本，所以必须先核对上述硬件条件。
 
-合并文件长 `9960256` bytes（`0x97fb40`），扇区擦写结束地址为 `0x980000`（不含），没有填满 32 MB。该写入范围不覆盖 `0xA20000` 开始的 storage，也不写 TF 或独立的 C6 Flash；这不表示 NVS 得到保留。
+合并文件长 `9977632` bytes（`0x983f20`），扇区擦写结束地址为 `0x984000`（不含），没有填满 32 MB。该写入范围不覆盖 `0xA20000` 开始的 storage，也不写 TF 或独立的 C6 Flash；这不表示 NVS 得到保留。
 
 ### 可选：分文件安装
 
@@ -109,12 +109,12 @@ py -3.11 -m venv .venv-flash
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x2000 firmware/releases/2026.11.26-phone-http/bootloader.bin `
-  0x10000 firmware/releases/2026.11.26-phone-http/partition-table.bin `
-  0x20000 firmware/releases/2026.11.26-phone-http/luna-panel.bin
+  0x2000 firmware/releases/2026.11.27/bootloader.bin `
+  0x10000 firmware/releases/2026.11.27/partition-table.bin `
+  0x20000 firmware/releases/2026.11.27/luna-panel.bin
 ```
 
-烧录后松开 BOOT 并重启 P4，保持 DC 供电。应出现五卡界面、触摸切卡与蓝牙初始化；时钟需要下一节 Agent 校时，天气和额度不会因烧录而自动配置。如果报告芯片不兼容、NVS 初始化失败或 C6 controller unavailable，停止并查明原因，不用 force 或整片擦除绕过。
+烧录后松开 BOOT 并重启 P4，保持 DC 供电。应出现六卡界面、触摸切卡与蓝牙初始化；时钟需要下一节 Agent 校时，天气和额度不会因烧录而自动配置。如果报告芯片不兼容、NVS 初始化失败或 C6 controller unavailable，停止并查明原因，不用 force 或整片擦除绕过。
 
 ## 6. 手机设置；按需安装 Windows Agent
 
@@ -178,8 +178,8 @@ Get-Content pc-agent/ble-link.log -Tail 12
 对仓库中已发布的三份无凭据 bin，可用独立刷写环境离线重现合并包；不要把私人构建 bin 覆盖进公开目录：
 
 ```powershell
-.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.26-phone-http
-.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.26-phone-http --check
+.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.27
+.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.27 --check
 ```
 
 脚本在合并前核对原三份文件的地址、大小、SHA 与 B1 分区，合并后核对各段原字节和填充区；不连接设备，不将文件填满 Flash。

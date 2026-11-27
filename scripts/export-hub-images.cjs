@@ -8,14 +8,16 @@ const crypto = require('node:crypto');
 const docs = path.resolve(__dirname, '../docs');
 const output = path.resolve(process.env.LUNA_HUB_IMAGE_DIR || path.join(docs, 'images/hub-16x9'));
 const scenes = [
-  ['00-cover', '繁星与像素猫的\n桌面伙伴', '五张卡片，一只小猫。\n把时间、音乐和电脑状态，\n留在抬眼可见的地方。', '时钟 / 音乐 / 天气 / 额度 / 电脑', null],
+  ['00-cover', '繁星与像素猫的\n桌面伙伴', '六张卡片，一只小猫。\n把时间、音乐和专注，\n留在抬眼可见的地方。', '时钟 / 音乐 / 天气 / 额度 / 电脑 / 专注', null],
   ['01-clock', '抬眼，\n就能看见时间。', '日期与时间清晰呈现。\n连接 Windows 后自动校时，\n当前采用北京时间。', '01 / 时钟', null],
   ['02-music', '音乐控制，\n留在桌面。', '查看歌名、歌手与播放状态。\n轻触播放、暂停、上一首和下一首。', '02 / 音乐', '音乐卡'],
   ['03-volume', '音量和静音，\n触手可及。', '点击音量按钮展开竖向滑条。\n调节 Windows 系统音量，\n点击顶部按钮切换静音。', '02 / 系统音量', '音乐卡'],
-  ['04-weather', '天气小卡，\n多一点温度。', '首次向导填写 Wi-Fi 和城市。\n保存后由设备独立更新天气，\n无需电脑转发天气数据。', '03 / 天气 · 新版配置候选', '天气卡'],
+  ['04-weather', '天气小卡，\n多一点温度。', '手机连接设备热点设置网络与城市。\n保存后由设备独立更新天气，\n无需电脑转发天气数据。', '03 / 手机设置与独立天气', '天气卡'],
   ['05-codex', '工作状态，\n一眼可见。', '查看 Codex 剩余额度，\n以及前台 VS Code 工程名。\n额度功能需要已有 Codex 环境。', '04 / 额度与工程', '额度卡'],
   ['06-computer', '电脑状态，\n不用反复切窗。', '查看 CPU、GPU、内存与显存。\n通过 Windows 系统接口采集，\n无需额外监控驱动。', '05 / 电脑状态', '电脑卡'],
-  ['07-standby', '安静陪伴，\n也会回应你。', '三分钟无操作进入指针时钟。\n顶部空白也可手动切换，\n轻触屏幕即可返回。', '待机 / 像素猫', '电脑卡'],
+  ['07-focus', '留一段时间，\n专心做一件事。', '25 / 45 / 60 分钟，或自定义。\n运行时保持唤醒，暂停可待机。\n到时由行走小猫提醒。', '06 / 本机专注计时', '专注卡'],
+  ['08-focus-keyboard', '你的节奏，\n自己设定。', '绿色圆角数字键盘。\n自定义 1–999 分钟，\n设置时屏蔽底层卡片操作。', '06 / 自定义时长', '专注卡'],
+  ['09-standby', '安静陪伴，\n也会回应你。', '专注未运行时，三分钟无操作待机。\n顶部空白也可手动切换，\n轻触屏幕即可返回。', '待机 / 像素猫', '电脑卡'],
 ];
 
 async function main() {
@@ -38,7 +40,7 @@ async function main() {
     const page = await browser.newPage({viewport:{width:1920,height:1080}, deviceScaleFactor:1, timezoneId:'Asia/Shanghai', reducedMotion:'reduce'});
     const errors = [];
     page.on('pageerror', e=>errors.push(e.message));
-    await page.clock.setFixedTime(new Date('2026-10-08T20:08:00+08:00'));
+    await page.clock.setFixedTime(new Date('2026-11-27T20:08:00+08:00'));
     await page.goto(`http://127.0.0.1:${server.address().port}/design/preview/`);
     await page.locator('#digital-hm').waitFor();
     await page.evaluate(()=>document.fonts.ready);
@@ -68,9 +70,11 @@ async function main() {
       document.body.append(footer);
     });
     for (const [name,title,description,badge,button] of scenes) {
+      if(name==='09-standby') await page.locator('[data-focus-cancel]').last().click();
       if (button) await page.getByRole('button',{name:button,exact:true}).click();
       if(name==='03-volume') await page.locator('[data-action=volume-open]').click();
-      if(name==='07-standby') {
+      if(name==='08-focus-keyboard') await page.locator('#focus-custom').click();
+      if(name==='09-standby') {
         await page.locator('#display').click({position:{x:360,y:100}});
         await page.locator('#idle-screen').waitFor({state:'visible'});
       }

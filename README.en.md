@@ -1,14 +1,12 @@
 # Luna · A desktop companion under the stars
 
-The **codex/phone-wifi-setup** branch provides the **2026.11.26-phone-http phone-setup preview**. Connect a phone to Luna's open hotspot, scan/select a 2.4 GHz network, enter its password and set a weather location. Clock/weather run independently; the Windows Agent supplies Codex, PC/project data and media controls. See the [phone setup guide](docs/PHONE-SETUP.en.md).
+**2026.11.27 release** · [中文](README.md) · **English** · [Quick start](docs/HUB-QUICKSTART.md) · [Download release](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/releases/tag/v2026.11.27)
 
-[中文](README.md) · **English**
+Luna is a wireless desktop companion for the ESP32-P4-WIFI6-Touch-LCD-4B. Its 720×720 touchscreen offers six swipeable cards: time, music, weather, Codex quota, PC metrics and Focus. A starfield and an interactive roaming pixel cat accompany your desk.
 
-Luna is a wireless desktop companion built around ESP32-P4. Five swipeable cards on a 720×720 touchscreen bring together time, music, weather, Codex quota and PC metrics. A starfield and an interactive pixel cat add a little companionship to your desk.
+Clock, weather and Focus can work without a PC Agent. Configure 2.4 GHz Wi-Fi and a weather location from your phone; the Windows Agent adds music/system-volume controls, PC/workspace metrics and Codex quota over authenticated encrypted BLE.
 
-Authenticated, encrypted BLE connects Luna to Windows. Device-owned Wi-Fi handles weather and backup time synchronization. The DC-powered display stays on, with unchanged brightness in standby.
-
-The **2026.11.26-phone-http phone-setup preview** includes source code, deployment instructions, license materials and binaries without personal Wi-Fi credentials. All illustrations below come from the existing website preview with demo data; they are not hardware photographs. The device UI currently uses Chinese; this English introduction does not imply an on-device language selector.
+This release includes the large-digit Focus layout, green K2 numeric keypad, custom 1–999-minute sessions, phone Wi-Fi rows and connection/save feedback, full-screen setup dialogs and a music tonearm. **Distribution: 2026.11.27; embedded app: 2026.11.27-focus-align.** The firmware is the user-approved deployed build, without recompiling to rename it. Illustrations are website previews with demo data, not hardware photos. The device UI is Chinese and the timezone is UTC+8.
 
 ## Screens and features
 
@@ -48,9 +46,15 @@ Two rings show CPU and GPU usage, with bars for RAM and dedicated VRAM. The Wind
 
 <img src="docs/images/computer.png" width="360" alt="Luna CPU GPU rings and RAM VRAM bars">
 
+### Focus · Make room for one task
+
+Choose 25 / 45 / 60 minutes, or custom **1–999 minutes** using the green rounded keypad. Editing blocks background cards and gestures. Start/pause/resume/end work locally; running prevents clock standby across cards, while pausing allows it. The existing roaming cat gives the completion reminder. Session state resets after reboot. See the [Focus guide](docs/FOCUS.md).
+
+<img src="docs/images/focus.png" width="360" alt="Luna Focus timer with large digits and custom minutes"> <img src="docs/images/focus-keyboard.png" width="360" alt="Green K2 numeric keypad with full-screen modal">
+
 ### Standby and the pixel cat · Quiet company
 
-After three minutes without input, or a tap on the available blank area above the card, Luna switches to an analog clock, sleeping cat, floating ZZZ and a warm sentence. The first touch only wakes the previous card. In normal use, the cat blinks, wanders and responds to taps.
+When Focus is not running, after three minutes without input or a tap on the available blank area above the card, Luna switches to an analog clock, sleeping cat, floating ZZZ and a warm sentence. The first touch only wakes the previous card. In normal use, the cat blinks, wanders and responds to taps.
 
 <img src="docs/images/standby.png" width="360" alt="Luna analog standby clock and sleeping pixel cat">
 
@@ -69,15 +73,15 @@ The product focuses on Windows BLE and device Wi-Fi. There is no macOS/Linux Age
 ## Download and deploy
 
 1. Read the [deployment guide](docs/DEPLOYMENT.en.md) and check your board, silicon revision and existing partition layout.
-2. For a first installation, download the [merged binary](firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin), verify SHA-256 and flash it at `0x0` using the guide. Existing Luna devices use app-only upgrades.
+2. For a first installation, download the [merged binary](firmware/releases/2026.11.27/luna-first-install-0x0.bin), verify SHA-256 and flash it at `0x0` using the guide. Existing Luna devices use app-only upgrades.
 3. Connect a phone to Luna's setup hotspot and open `http://192.168.4.1` to scan/connect Wi-Fi and set the weather location. For PC features, pair Luna in Windows, install Python 3.11 x64 and run **Start-Luna.cmd**.
 
-[First-install merged binary · 0x0](firmware/releases/2026.11.26-phone-http/luna-first-install-0x0.bin) · [App binary](firmware/releases/2026.11.26-phone-http/luna-panel.bin) · [Bootloader](firmware/releases/2026.11.26-phone-http/bootloader.bin) · [Partition table](firmware/releases/2026.11.26-phone-http/partition-table.bin) · [Checksums](firmware/releases/2026.11.26-phone-http/SHA256SUMS.txt)
+[First-install merged binary · 0x0](firmware/releases/2026.11.27/luna-first-install-0x0.bin) · [App binary](firmware/releases/2026.11.27/luna-panel.bin) · [Bootloader](firmware/releases/2026.11.27/bootloader.bin) · [Partition table](firmware/releases/2026.11.27/partition-table.bin) · [Checksums](firmware/releases/2026.11.27/SHA256SUMS.txt)
 
-[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/codex/phone-wifi-setup.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning this version:
+[Download this version as a source + binaries ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/main.zip). The source is also available through GitHub **Code → Download ZIP**, or by cloning this version:
 
 ```powershell
-git clone --depth 1 --branch codex/phone-wifi-setup https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
+git clone --depth 1 --branch main https://github.com/2823700739-sudo/ESP32-P4-4B-Luna.git
 ```
 
 Separate binary distributions must also include [LICENSE](LICENSE), [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md) and the complete [LICENSES/](LICENSES/) directory.
@@ -88,7 +92,7 @@ Separate binary distributions must also include [LICENSE](LICENSE), [NOTICE](NOT
 
 ```text
 firmware/luna-panel/                 ESP-IDF firmware and built-in assets
-firmware/releases/2026.11.26-phone-http/ Credential-free binaries and manifest
+firmware/releases/2026.11.27/ Credential-free binaries and manifest
 pc-agent/                           Windows BLE Agent
 scripts/                            Build, preview and maintenance tools
 docs/design/preview/                Existing interactive website preview
@@ -103,6 +107,6 @@ This version excludes local credentials, runtime logs, virtual environments, too
 
 ## Current limitations and licensing
 
-The timezone is fixed to UTC+8. Weather needs working 2.4 GHz Wi-Fi, DNS/NTP and Open-Meteo HTTPS access. The Codex quota source may be unavailable; customized VS Code titles or players without GSMTC may be unsupported. The author confirmed Wi-Fi working on this build. Weather-location save/power-cycle recovery, other C6 combinations and long-duration operation have not been separately confirmed; see the [firmware manifest](firmware/releases/2026.11.26-phone-http/manifest.json).
+The timezone is fixed to UTC+8. Weather needs 2.4 GHz Wi-Fi, DNS/NTP and Open-Meteo HTTPS. PC features require compatible Windows media/Codex sources. Focus is RAM-only and resets after reboot. The release is user-approved; full-duration timing, fresh merged installation, newly saved setup power-cycle and long-run checks were not individually recorded. See the [firmware manifest](firmware/releases/2026.11.27/manifest.json).
 
 Luna-owned code and documentation use [Apache License 2.0](LICENSE); explicit alternative per-file notices remain in effect. Third-party dependencies and derived Noto fonts retain their own terms. See the bilingual [third-party notices](THIRD_PARTY_NOTICES.md), [NOTICE](NOTICE) and [complete texts/version manifest](LICENSES/manifest.json). [Firmware assets](firmware/luna-panel/main/assets/README.md) and [pixel-cat provenance](docs/design/preview/assets/README.md) document their sources and conversion.

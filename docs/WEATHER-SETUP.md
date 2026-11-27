@@ -1,8 +1,8 @@
 # 首次设置 Luna 天气
 
-手机优先：新 `2026.11.26-phone-http` 使用 [手机热点设置](PHONE-SETUP.md)，时钟/天气无需电脑脚本。本页保留可选 BLE 兼容入口；正常 Start-Luna 不再询问天气。
+手机优先：新 `2026.11.27` 使用 [手机热点设置](PHONE-SETUP.md)，时钟/天气无需电脑脚本。本页保留可选 BLE 兼容入口；正常 Start-Luna 不再询问天气。
 
-这套配置入口需要 **2026.11.26-weather-preview 或更新的天气配置固件**。此前发布的 `v2026.11.25-preview` 不支持，脚本会在询问密码前提示升级。当前新固件已构建、离线回归通过，**首次实际配网与天气获取仍待实机验证**。
+当前 **2026.11.27 定版**保留此加密认证 BLE 配置入口；旧 `v2026.11.25-preview` 不支持，脚本会在询问密码前提示升级。普通用户优先使用手机网页；实际验证范围见本版清单。
 
 ## 三步设置
 
@@ -29,4 +29,4 @@
 
 `luna_setup/weather_v1` 是包含版本、配置编号、Wi-Fi 与地点的单一记录；成功保存后设备后台应用，旧天气缓存格式保持兼容。公开 bin 仍无个人网络配置。`-PrepareOnly` 仅用于电脑依赖准备，不连接设备、不触发向导，不属于配网验收。
 
-天气数据及城市服务须遵守 [Open-Meteo 的条款与署名要求](https://open-meteo.com/en/terms)。完整刷写与排障参见 [部署教程](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/blob/main/docs/DEPLOYMENT.md)；旧版本教程中的“没有入口”描述针对旧 bin，不代表新天气配置候选。
+天气数据及城市服务须遵守 [Open-Meteo 的条款与署名要求](https://open-meteo.com/en/terms)。完整刷写与排障参见 [部署教程](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/blob/main/docs/DEPLOYMENT.md)；旧版本教程中的“没有入口”描述针对旧 bin，不代表当前定版。

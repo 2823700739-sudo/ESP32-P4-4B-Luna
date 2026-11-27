@@ -1,7 +1,7 @@
 # Real-LVGL desktop UI regression
 
 This builds the actual B1 UI against the repository's managed LVGL 9.3 source.
-Only time, BLE/music and weather services are simulated. Pointer input goes
+Time, BLE/music and weather services are simulated; the focus timer is the actual C implementation. Pointer input goes
 through real LVGL input processing; widgets and event propagation are not mocked.
 No PC playback commands, BLE connections, serial ports or host time writes occur.
 
@@ -22,7 +22,9 @@ simulate DSI scanout, DMA/cache coherence or physical panel retention.
 
 Use explicit CMAKE_MAKE_PROGRAM/CMAKE_C_COMPILER/CMAKE_CXX_COMPILER paths if they
 are not on PATH. `.tools` is ignored and contains generated PPM snapshots of the
-five cards, vertical volume popup and idle dial. Convert formats with Pillow or
+six cards, the actual LVGL green K2 numeric keyboard and its full-screen modal,
+custom duration commit/cancel, running/paused standby policy, focus completion,
+vertical volume popup and idle dial. Convert formats with Pillow or
 another image decoder for inspection; do not commit machine-generated captures.
 
 This proves local input/state logic and rendering, not physical touch or LCD

@@ -1,6 +1,6 @@
 # Set up Luna from a phone
 
-Requires **2026.11.26-phone-http** or later firmware explicitly supporting phone setup. The published `v2026.11.25-preview` and BLE-only `2026.11.26-weather-preview` do not include this portal. This is a feature-branch preview. The author confirmed Wi-Fi working; see `manifest.json` for the remaining verification scope.
+The **2026.11.27 release** includes this phone setup flow. Older firmware without a phone portal must be upgraded first; see [deployment](DEPLOYMENT.en.md). Clock/weather/Focus do not need a Windows Agent.
 
 ## Clock and weather: no PC script needed
 
@@ -9,6 +9,10 @@ Requires **2026.11.26-phone-http** or later firmware explicitly supporting phone
 3. Open **http://192.168.4.1**. Automatic captive-portal opening is not guaranteed. Use HTTP, not HTTPS.
 4. Tap **扫描 Wi-Fi** (scan), select your **2.4 GHz Wi-Fi**, enter its password and tap **连接并继续** (connect). Selecting alone never joins; changing the selection clears the previous password. Manual name entry remains available for hidden networks or failed scans. This only tries the network in RAM; saved settings remain intact.
 5. After Luna connects and synchronizes network time, search for a city and verify its region/country, or enter a name and explicit coordinates manually. Press **Save to Luna**. Luna performs the city query; the phone need not have Internet access.
+
+Scan results appear as selectable rows showing the network name, signal and password requirement. Connection and save results appear beside their respective buttons and scroll into view when changed. Interrupted requests remain unconfirmed until device status resolves them; do not resubmit blindly.
+
+While the device setup dialog is visible, background taps, swipes and standby entry are blocked. **暂时隐藏** restores card interaction while leaving the hotspot open; **关闭热点** ends setup.
 
 Saved settings, Wi-Fi connectivity and fresh weather are separate results. Correct a wrong password by trying again. The hotspot closes about 20 seconds after saving and connecting, or after 10 minutes otherwise. The Chinese buttons **暂时隐藏** (hide) and **关闭热点** (close hotspot) respectively hide the dialog and end setup. Cancel/timeout restores the last committed network or disconnects an unsaved first-install trial. Check the hotspot name on the screen when reopening.
 

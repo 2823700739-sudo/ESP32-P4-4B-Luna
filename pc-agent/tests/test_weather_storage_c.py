@@ -63,6 +63,7 @@ typedef struct {bool show_hidden;int scan_type;struct{struct{unsigned min,max;}a
 typedef struct {uint8_t ssid[33];int rssi,authmode;} wifi_ap_record_t;
 int esp_wifi_scan_start(const wifi_scan_config_t*,bool);int esp_wifi_scan_stop(void);
 int esp_wifi_scan_get_ap_records(uint16_t*,wifi_ap_record_t*);int esp_wifi_clear_ap_list(void);
+int esp_wifi_sta_get_ap_info(wifi_ap_record_t*);
 #define WIFI_INIT_CONFIG_DEFAULT() {0}
 typedef struct {struct {uint8_t ssid[32],password[64];struct{int authmode;}threshold;int sae_pwe_h2e;}sta;
 struct {uint8_t ssid[32],password[64];unsigned ssid_len,channel,max_connection;int authmode;}ap;} wifi_config_t;
@@ -93,6 +94,9 @@ static int64_t test_now;
 static int test_mode,portal_running;
 static int ap_auth,ap_has_password;
 static int scan_fault,scan_calls,scan_cleared,scan_stopped,connect_calls;
+static wifi_ap_record_t associated;
+static int associated_error;
+int esp_wifi_sta_get_ap_info(wifi_ap_record_t*out){*out=associated;return associated_error;}
 int esp_wifi_scan_start(const wifi_scan_config_t*c,bool block){if(block||c->show_hidden)return -2;scan_calls++;return scan_fault;}
 int esp_wifi_scan_stop(void){scan_stopped++;return 0;}int esp_wifi_clear_ap_list(void){scan_cleared++;return 0;}
 int esp_wifi_scan_get_ap_records(uint16_t*n,wifi_ap_record_t*out){
@@ -139,6 +143,7 @@ void test_reset(int preserve){if(!preserve){has_store=false;memset(&stored,0,siz
   test_now=0;portal_running=0;trial_active=ap_committed=false;ap_deadline=ap_close_after=0;memset(&ap,0,sizeof(ap));atomic_store(&ap_request,0);atomic_store(&station_enabled,false);
   memset(&scan,0,sizeof(scan));atomic_store(&scan_busy,false);atomic_store(&scan_done,0);scan_started=false;scan_next=scan_deadline=0;
   scan_fault=scan_calls=scan_cleared=scan_stopped=connect_calls=0;
+  memset(&associated,0,sizeof(associated));associated_error=0;trial_deadline=0;memset(trial_ssid,0,sizeof(trial_ssid));
   memset(&setup_status,0,sizeof(setup_status));atomic_store(&online,false);atomic_store(&configured,false);atomic_store(&available,false);atomic_store(&cached,false);atomic_store(&reconfiguring,false);
   luna_ble_wifi_start();test_pump();}
 void test_faults(int a,int b){nvs_error=a;rpc_error=b;}
@@ -157,6 +162,15 @@ void test_scan_fault(int error){scan_fault=error;}int test_scan_state(void){retu
 int test_scan_count(void){return scan.count;}int test_scan_calls(void){return scan_calls;}
 int test_scan_cleared(void){return scan_cleared;}int test_scan_stopped(void){return scan_stopped;}
 int test_connect_calls(void){return connect_calls;}
+void test_trial_tick(int seconds,const char*ssid,int ip,int error){
+  test_now+=(int64_t)seconds*1000000;memset(&associated,0,sizeof(associated));
+  if(ssid)strlcpy((char*)associated.ssid,ssid,sizeof(associated.ssid));
+  associated_error=error;
+  if(ip)network_event(NULL,IP_EVENT,IP_EVENT_STA_GOT_IP,NULL);else network_ready(false);
+  service_trial();
+}
+int test_trial_state(void){return ap.trial_state;}int test_trial_error(void){return ap.trial_error;}
+const char*test_trial_id(void){return ap.trial_id;}
 const char*test_scan_name(int i){return scan.networks[i].ssid;}
 int test_scan_secure(int i){return scan.networks[i].secured;}
 '''
@@ -182,6 +196,8 @@ class StorageTests(unittest.TestCase):
         cls.lib.luna_setup_ap_request.argtypes=[C.c_bool]
         cls.lib.luna_setup_scan_request.restype=C.c_bool
         cls.lib.test_scan_name.restype=C.c_char_p
+        cls.lib.test_trial_tick.argtypes=[C.c_int,C.c_char_p,C.c_int,C.c_int]
+        cls.lib.test_trial_id.restype=C.c_char_p
         cls.lib.test_stored_id.restype=C.c_char_p;cls.lib.test_status_id.restype=C.c_char_p
     @classmethod
     def tearDownClass(cls):
@@ -233,6 +249,35 @@ class StorageTests(unittest.TestCase):
         self.assertFalse(self.lib.test_ap_active());self.assertFalse(self.lib.test_portal_running())
         self.lib.luna_setup_ap_request(True);self.lib.test_ap_tick(1)
         self.assertTrue(self.lib.test_ap_active())
+    def test_trial_queued_with_old_online_network_cannot_report_success(self):
+        self.lib.test_trial_tick(0,b'Old network',1,0)
+        c=self.config();self.assertTrue(self.lib.luna_ble_wifi_try_network(C.byref(c)))
+        self.lib.test_trial_tick(0,b'Old network',1,0)
+        self.assertEqual(self.lib.test_trial_state(),1)
+        self.assertEqual(self.lib.test_trial_id(),b'1'*32)
+        self.assertFalse(self.lib.luna_setup_scan_request())
+        self.assertFalse(self.lib.luna_ble_wifi_configure(C.byref(c)))
+        self.lib.test_pump();self.lib.test_trial_tick(1,b'Old network',1,0)
+        self.assertEqual(self.lib.test_trial_state(),1)
+        self.lib.test_trial_tick(1,b'Test network',1,0)
+        self.assertEqual(self.lib.test_trial_state(),2)
+        self.assertFalse(self.lib.test_has_store())
+        self.assertTrue(self.lib.luna_ble_wifi_configure(C.byref(c)))
+    def test_trial_requires_ip_and_matching_association_then_has_bounded_failure(self):
+        c=self.config();self.assertTrue(self.lib.luna_ble_wifi_try_network(C.byref(c)));self.lib.test_pump()
+        self.lib.test_trial_tick(1,b'Test network',0,0);self.assertEqual(self.lib.test_trial_state(),1)
+        self.lib.test_trial_tick(1,b'Test network',1,-1);self.assertEqual(self.lib.test_trial_state(),1)
+        self.lib.test_trial_tick(29,b'Wrong network',1,0)
+        self.assertEqual(self.lib.test_trial_state(),3);self.assertEqual(self.lib.test_trial_error(),263)
+        self.lib.test_trial_tick(1,b'Test network',1,0);self.assertEqual(self.lib.test_trial_state(),3)
+        c=self.config(b'2'*32);self.assertTrue(self.lib.luna_ble_wifi_try_network(C.byref(c)))
+        self.assertEqual(self.lib.test_trial_id(),b'2'*32);self.assertEqual(self.lib.test_trial_state(),1)
+    def test_trial_radio_failure_and_close_clear_current_result(self):
+        self.lib.test_reset_driver();self.lib.test_faults(0,-1)
+        c=self.config();self.assertTrue(self.lib.luna_ble_wifi_try_network(C.byref(c)));self.lib.test_pump()
+        self.assertEqual(self.lib.test_trial_state(),3);self.assertEqual(self.lib.test_trial_error(),-1)
+        self.lib.luna_setup_ap_request(False);self.lib.test_ap_tick(1)
+        self.assertEqual(self.lib.test_trial_state(),0);self.assertEqual(self.lib.test_trial_id(),b'')
     def test_scan_is_worker_owned_deduplicated_and_does_not_join_or_save(self):
         before=self.lib.test_connect_calls()
         self.assertTrue(self.lib.luna_setup_scan_request());self.assertEqual(self.lib.test_scan_calls(),0)

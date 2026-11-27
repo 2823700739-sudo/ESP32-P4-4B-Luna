@@ -1,16 +1,59 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CARDS, PreviewModel, demoSnapshot, percent, petPosition, petMotion } from './model.mjs';
+import { CARDS, PreviewModel, FocusTimer, demoSnapshot, percent, petPosition, petMotion } from './model.mjs';
 
 test('boot always starts at the clock card, not the last business card', () => {
-  assert.equal(new PreviewModel().card, 'clock'); assert.equal(CARDS.length,5);
+  assert.equal(new PreviewModel().card, 'clock'); assert.equal(CARDS.length,6);
 });
 test('carousel wraps in both directions', () => {
-  const m = new PreviewModel(); m.navigate(-1); assert.equal(m.card,'computer');
-  m.navigate(1); assert.equal(m.card,'clock'); m.navigate(12); assert.equal(m.card,'weather');
+  const m = new PreviewModel(); m.navigate(-1); assert.equal(m.card,'focus');
+  m.navigate(1); assert.equal(m.card,'clock'); m.navigate(14); assert.equal(m.card,'weather');
 });
 test('two rapid toggles preserve the original paused state', () => {
   const m = new PreviewModel(); m.command('toggle'); m.command('toggle'); assert.equal(m.playing,false); assert.equal(m.actions,2);
+});
+
+test('focus preserves fractional time through pause and rejects an accidental new preset',()=>{
+  const f=new FocusTimer();assert.equal(f.select(45),true);f.start(1000);
+  assert.equal(f.start(2000),false);assert.equal(f.select(25),false);
+  f.pause(2250);assert.equal(f.leftMs,2698750);assert.equal(f.remaining(9000000),2699);
+  f.start(9000000);assert.equal(f.deadline,11698750);
+  f.tick(11698750);assert.equal(f.state,'done');assert.equal(f.notice,true);
+});
+test('running focus blocks standby behind other cards and acknowledges completion once',()=>{
+  const m=new PreviewModel();m.setScenario('offline');m.chooseCard('focus');
+  assert.equal(m.command('focus-start',1000),true);const deadline=m.focus.deadline;
+  m.chooseCard('music');m.tick(200000);assert.equal(m.idle,false);assert.equal(m.enterIdle(),false);
+  m.tick(deadline);assert.equal(m.focus.state,'done');assert.equal(m.focus.notice,true);
+  assert.equal(m.card,'music');assert.equal(m.actions,0);
+  m.touch(deadline+1);m.chooseCard('focus');assert.equal(m.focus.notice,false);
+  m.tick(deadline+1000);assert.equal(m.focus.notice,false);
+});
+test('focus uses a deadline after delayed ticks and cannot pause at zero',()=>{
+  const f=new FocusTimer();f.start(1000);assert.equal(f.remaining(125500),1376);
+  assert.equal(f.pause(1501000),false);assert.equal(f.state,'done');
+  f.start(2000000);assert.equal(f.remaining(2000000),1500);
+  f.end();assert.equal(f.state,'idle');assert.equal(f.notice,false);
+});
+test('focus reboot creates a fresh session and rejects unsupported presets',()=>{
+  const f=new FocusTimer();assert.equal(f.select(1000),false);f.select(60);f.start(1000);
+  const reboot=new FocusTimer();assert.equal(reboot.minutes,25);assert.equal(reboot.state,'idle');
+});
+test('custom editor locks navigation, media and standby until confirm or cancel',()=>{
+  const m=new PreviewModel();m.chooseCard('focus');assert.equal(m.openFocusEditor(),true);
+  assert.equal(m.navigate(1),false);m.chooseCard('music');assert.equal(m.card,'focus');
+  assert.equal(m.enterIdle(),false);assert.equal(m.command('toggle',1),false);
+  assert.equal(m.setFocusMinutes(0,10),false);assert.equal(m.focusEditing,true);
+  assert.equal(m.setFocusMinutes(40,11),true);assert.equal(m.focus.minutes,40);assert.equal(m.focus.state,'idle');
+  m.command('focus-start',100);assert.equal(m.openFocusEditor(),false);
+  m.touch(200);m.command('focus-pause',200);assert.equal(m.enterIdle(),true);
+  m.touch(300);m.command('focus-start',300);assert.equal(m.enterIdle(),false);
+});
+test('custom duration validates integer bounds and retains a long monotonic deadline',()=>{
+  const f=new FocusTimer();for(const n of [0,1000,1.5,NaN,Infinity,'40'])assert.equal(f.select(n),false);
+  for(const n of [1,40,65,999])assert.equal(f.select(n),true);
+  f.start(1000);assert.equal(f.deadline,59941000);assert.equal(f.remaining(1000),59940);
+  f.tick(f.deadline);assert.equal(f.notice,true);
 });
 test('two rapid toggles also preserve an original playing state', () => {
   const m = new PreviewModel(); m.playing=true; m.command('toggle'); m.command('toggle'); assert.equal(m.playing,true);
@@ -37,6 +80,16 @@ test('offline, empty, and stale data all disable media commands', () => {
 });
 test('Wi-Fi failure does not disable BLE music controls', () => {
   const m = new PreviewModel(); m.setScenario('wifi-off'); assert.equal(m.command('toggle'),true); assert.equal(m.data.weather.cached,true);
+});
+
+test('record and tonearm require current connected media, independent of command availability', () => {
+  const m=new PreviewModel();m.playing=true;
+  assert.equal(m.musicPlaying,true);
+  for(const scenario of ['offline','ble-off','stale','empty']){
+    m.setScenario(scenario);assert.equal(m.musicPlaying,false);
+  }
+  m.setScenario('wifi-off');assert.equal(m.musicPlaying,true);
+  m.playing=false;assert.equal(m.musicPlaying,false);
 });
 test('BLE failure allows independent Wi-Fi weather and backup time', () => {
   const d=demoSnapshot('ble-off'); assert.equal(d.wifi,true); assert.equal(d.weather.cached,false); assert.equal(d.timeSource,'NTP');

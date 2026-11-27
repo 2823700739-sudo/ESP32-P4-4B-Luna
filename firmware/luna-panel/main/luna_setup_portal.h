@@ -8,6 +8,9 @@ typedef struct {
     char ssid[33];
     unsigned remaining_seconds;
     int error;
+    char trial_id[33];
+    unsigned trial_state; /* 0 idle, 1 connecting, 2 connected to target, 3 failed */
+    int trial_error;
 } luna_setup_ap_state_t;
 
 bool luna_setup_ap_snapshot(luna_setup_ap_state_t *out);

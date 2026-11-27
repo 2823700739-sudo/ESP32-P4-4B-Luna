@@ -12,5 +12,6 @@ luna_pet_position_t luna_pet_motion(int64_t ms)
 }
 unsigned luna_ui_next_card(unsigned current,int delta)
 {
-    int n=(int)(current%5)+delta%5; return (unsigned)((n+5)%5);
+    int n=(int)(current%LUNA_UI_CARD_COUNT)+delta%LUNA_UI_CARD_COUNT;
+    return (unsigned)((n+LUNA_UI_CARD_COUNT)%LUNA_UI_CARD_COUNT);
 }

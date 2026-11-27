@@ -1,8 +1,8 @@
 # First-time weather setup
 
-For phone-first `2026.11.26-phone-http`, use [phone hotspot setup](PHONE-SETUP.en.md). Clock/weather need no PC script. This page retains the optional BLE fallback; normal Start-Luna no longer asks a weather question.
+For phone-first `2026.11.27`, use [phone hotspot setup](PHONE-SETUP.en.md). Clock/weather need no PC script. This page retains the optional BLE fallback; normal Start-Luna no longer asks a weather question.
 
-Use **2026.11.26-weather-preview** firmware and the matching Windows package. The older `v2026.11.25-preview` image has no setup capability. The candidate builds and passes offline tests; **real-device Wi-Fi provisioning and weather retrieval remain unverified**.
+The current **2026.11.27** firmware retains this authenticated BLE setup fallback; the older `v2026.11.25-preview` does not support it. Normal setup uses the phone portal. Verification scope is recorded in the release manifest.
 
 1. Flash the new app at **0x20000** on an existing Luna with the same partition layout to preserve pairing. Use the new **0x0** merged image only for first installation: it clears pairing, Wi-Fi settings and weather cache. Do not erase the whole chip or flash C6. Keep DC power connected and manually pair Luna in Windows, confirming matching numbers on both screens.
 2. For this optional BLE fallback, install Python 3.11 x64, extract the Windows package to a permanent folder and run **Configure-Weather.cmd**. Weather-only setup does not install or start a previously stopped resident; it temporarily pauses/resumes only the matching resident already running from this folder. Phone setup does not need this script.

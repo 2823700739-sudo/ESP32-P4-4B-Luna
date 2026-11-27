@@ -60,11 +60,32 @@ static void read_input(lv_indev_t *in,lv_indev_data_t *data){(void)in;data->stat
 static void advance(unsigned ms){for(unsigned i=0;i<ms;i+=10){test_us+=10000;lv_tick_inc(10);lv_timer_handler();}}
 static void pointer(int x,int y,bool pressed){input_point=(lv_point_t){x,y};input_state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;advance(40);}
 static void click(int x,int y){pointer(x,y,true);pointer(x,y,false);advance(250);}
+static void click_object(lv_obj_t *object){lv_area_t a;lv_obj_get_coords(object,&a);click((a.x1+a.x2)/2,(a.y1+a.y2)/2);}
 static void save(const char *name)
 {
     char path[256];snprintf(path,sizeof(path),"%s.ppm",name);lv_refr_now(NULL);
     FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n720 720\n255\n");
     for(unsigned i=0;i<720*720;i++){fputc(front_pixels[i*3+2],f);fputc(front_pixels[i*3+1],f);fputc(front_pixels[i*3],f);}fclose(f);
+}
+static void assert_visible_text_centered(lv_obj_t *container)
+{
+    // Measure rendered ink independently of font metrics/layout calculations.
+    lv_obj_update_layout(root);lv_refr_now(NULL);
+    lv_area_t parent,label;lv_obj_get_coords(container,&parent);
+    lv_obj_get_coords(lv_obj_get_child(container,0),&label);
+    int bg_index=((parent.y1+2)*720+(parent.x1+parent.x2)/2)*3;
+    int left=720,right=-1,top=720,bottom=-1;
+    for(int y=label.y1;y<=label.y2;y++)for(int x=label.x1;x<=label.x2;x++){
+        if(x<0||x>=720||y<0||y>=720)continue;
+        int pixel=(y*720+x)*3,difference=0;
+        for(unsigned c=0;c<3;c++)difference+=abs((int)front_pixels[pixel+c]-front_pixels[bg_index+c]);
+        if(difference<75)continue;
+        if(x<left)left=x;if(x>right)right=x;
+        if(y<top)top=y;if(y>bottom)bottom=y;
+    }
+    assert(right>=left&&bottom>=top);
+    assert(abs(left+right-parent.x1-parent.x2)<=2);
+    assert(abs(top+bottom-parent.y1-parent.y2)<=2);
 }
 static uint32_t computer_background_hash(void)
 {
@@ -116,8 +137,8 @@ int main(int argc,char **argv)
         assert(fabs(a.x-b.x)<.1&&fabs(a.y-b.y)<.1);
         assert(b.x>=8&&b.x<=660&&b.y>=85&&b.y<=596);
     }
-    assert(luna_ui_next_card(0,-1)==4&&luna_ui_next_card(4,1)==0);
-    puts("PASS pet rails/rest/resume continuity and five-card wrap");
+    assert(luna_ui_next_card(0,-1)==5&&luna_ui_next_card(5,1)==0&&luna_ui_next_card(4,1)==5);
+    puts("PASS pet rails/rest/resume continuity and six-card wrap");
     lv_init();lv_display_t *display=lv_display_create(720,720);lv_display_set_color_format(display,LV_COLOR_FORMAT_RGB888);
     const uint32_t chinese[]={0x6d77,0x9f98,0x55b5,0x661f,0x20087};
     for(unsigned i=0;i<sizeof(chinese)/sizeof(chinese[0]);i++) {
@@ -136,7 +157,7 @@ int main(int argc,char **argv)
     for(unsigned i=0;i<sizeof(large_label_chars)/sizeof(large_label_chars[0]);i++){
         lv_font_glyph_dsc_t glyph;assert(lv_font_get_glyph_dsc(&luna_cjk_20,&glyph,large_label_chars[i],0));
     }
-    for(unsigned i=0;i<5;i++){
+    for(unsigned i=0;i<CARD_COUNT;i++){
         assert(lv_obj_get_width(nav[i])==64&&lv_obj_get_height(nav[i])==58);
         assert(lv_obj_get_style_text_font(nav_names[i],0)==&luna_cjk_16);
         lv_area_t button_bounds,text_bounds;lv_obj_get_coords(nav[i],&button_bounds);lv_obj_get_coords(nav_names[i],&text_bounds);
@@ -153,14 +174,36 @@ int main(int argc,char **argv)
     pointer(500,430,true);pointer(420,430,true);pointer(340,430,true);pointer(250,430,false);advance(300);
     assert(active==1);assert(action_count==0);save("music");puts("PASS real input horizontal swipe reaches root; no media action");
     assert(!idle);
-    click(360,443);click(360,443);assert(action_count==2&&!test_music.playing);puts("PASS two rapid play clicks alternate");
-    click(599,537);assert(!lv_obj_has_flag(volume_popup,LV_OBJ_FLAG_HIDDEN));
-    assert(lv_obj_get_height(slider)>lv_obj_get_width(slider));save("volume");
-    click(568,288);assert(test_music.muted);assert(lv_image_get_src(volume_icon)==&luna_icon_mute_24);
+    assert(lv_obj_get_width(play)==84&&lv_obj_get_height(previous)==56&&lv_obj_get_height(next)==56);
+    assert(lv_obj_get_y(play)+42==326&&lv_obj_get_y(previous)+28==326&&lv_obj_get_y(next)+28==326);
+    assert(tonearm_position==0&&tonearm_points[2].x>196);
+    test_music.playing=true;advance(100);
+    assert(tonearm_position>0&&tonearm_position<1);save("music-moving");
+    advance(300);assert(tonearm_position==1&&tonearm_points[2].x<196);save("music-playing");
+    double playing_angle=record_angle;test_music.controllable=false;advance(100);
+    assert(tonearm_position==1&&record_angle!=playing_angle);
+    test_music.online=false;advance(400);assert(tonearm_position==0);save("music-offline");
+    test_music.online=true;test_music.available=false;advance(400);assert(tonearm_position==0);
+    test_music.available=true;advance(100);assert(tonearm_position>0&&tonearm_position<1);
+    test_music.playing=false;advance(50);assert(tonearm_position<1);advance(300);assert(tonearm_position==0);
+    test_music.playing=true;advance(100);float hidden_tonearm=tonearm_position;
+    choose_card(0,0);advance(500);assert(tonearm_position==hidden_tonearm);
+    choose_card(1,0);advance(50);assert(tonearm_position==1);
+    set_idle(true);test_music.playing=false;advance(500);assert(tonearm_position==1);
+    set_idle(false);advance(50);assert(tonearm_position==0);
+    test_music.controllable=true;advance(50);
+    assert(action_count==0);save("music-paused");
+    puts("PASS tonearm eases and reverses between playback and parking, ignores controllability, parks offline/empty, and freezes hidden/idle");
+    click_object(play);click_object(play);assert(action_count==2&&!test_music.playing);puts("PASS two rapid play clicks alternate");
+    click_object(volume_button);assert(!lv_obj_has_flag(volume_popup,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_get_height(slider)==192&&lv_obj_get_width(volume_popup)==128);
+    assert(lv_obj_get_child_count(volume_popup)==3);save("volume");
+    click_object(mute);assert(test_music.muted);assert(lv_image_get_src(volume_icon)==&luna_icon_mute_24);
     assert(!lv_obj_has_flag(volume_popup,LV_OBJ_FLAG_HIDDEN));puts("PASS top-popup mute and matching right-hand volume icon");
-    unsigned before=active;pointer(568,493,true);pointer(568,413,true);pointer(568,373,false);assert(active==before);
+    lv_area_t slider_area;lv_obj_get_coords(slider,&slider_area);int slider_x=(slider_area.x1+slider_area.x2)/2;
+    unsigned before=active;pointer(slider_x,slider_area.y2-10,true);pointer(slider_x,slider_area.y1+80,true);pointer(slider_x,slider_area.y1+20,false);assert(active==before);
     assert(test_music.volume>50);puts("PASS vertical slider changes volume without navigating");
-    click(360,443);assert(lv_obj_has_flag(volume_popup,LV_OBJ_FLAG_HIDDEN));assert(test_music.playing);
+    click_object(play);assert(lv_obj_has_flag(volume_popup,LV_OBJ_FLAG_HIDDEN));assert(test_music.playing);
     puts("PASS outside tap closes popup AND performs playback action");
     for(unsigned i=2;i<5;i++){choose_card(i,1);advance(300);save(i==2?"weather":i==3?"codex":"computer");}
     assert(lv_obj_get_style_text_font(weather_city,0)==&luna_cjk_28);
@@ -288,11 +331,93 @@ int main(int argc,char **argv)
     lv_obj_update_layout(root);
     lv_area_t panel_bounds,access_bounds;lv_obj_get_coords(setup_panel,&panel_bounds);lv_obj_get_coords(setup_access,&access_bounds);
     assert(access_bounds.x1>=panel_bounds.x1&&access_bounds.x2<=panel_bounds.x2);
+    assert(lv_obj_get_width(setup_overlay)==720&&lv_obj_get_height(setup_overlay)==720);
+    /* Real pointer dispatch: background navigation, arrows, swipes and standby
+       must all remain blocked, including outside the smaller dialog. */
+    for(unsigned i=0;i<CARD_COUNT;i++){
+        lv_area_t a;lv_obj_get_coords(nav[i],&a);click((a.x1+a.x2)/2,(a.y1+a.y2)/2);
+        assert(active==2&&setup_visible&&!idle);
+    }
+    click(20,360);click(700,360);click(10,10);
+    pointer(600,650,true);pointer(400,650,true);pointer(170,650,true);pointer(170,650,false);
+    assert(active==2&&setup_visible&&!idle&&action_count==setup_actions);
+    last_touch=test_us-IDLE_US-100000;advance(100);
+    assert(!idle&&setup_visible);
+    puts("PASS full-screen setup modal blocks background navigation, arrows, swipe and manual/automatic standby");
     save("phone-setup");click(208,539);
     assert(test_ap.active&&lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(setup_overlay,LV_OBJ_FLAG_HIDDEN));
+    lv_area_t nav_bounds;lv_obj_get_coords(nav[0],&nav_bounds);
+    click((nav_bounds.x1+nav_bounds.x2)/2,(nav_bounds.y1+nav_bounds.y2)/2);
+    assert(active==0&&test_ap.active&&!idle);
+    choose_card(2,0);advance(300);
     click(560,521);assert(!lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
     click(487,539);assert(!test_ap.active&&lv_obj_has_flag(setup_panel,LV_OBJ_FLAG_HIDDEN));
     assert(!lv_label_get_text(setup_access)[0]&&action_count==setup_actions);
     puts("PASS phone setup physical button, Chinese open-network guidance bounds, hide/reopen/close, no media action");
-    lv_obj_update_layout(root);puts("Native UI assertions passed; rendered five cards, volume and manual/automatic clock");return 0;
+    unsigned focus_actions=action_count;
+    choose_card(5,0);advance(100);
+    lv_font_glyph_dsc_t colon;assert(lv_font_get_glyph_dsc(&luna_digits_86,&colon,':',0));
+    const uint32_t focus_glyphs[]={0x4e13,0x6ce8,0x5f00,0x59cb,0x6682,0x505c,0x7ed3,0x675f,0x4f11,0x606f,0x7ee7,0x7eed};
+    for(unsigned i=0;i<sizeof(focus_glyphs)/sizeof(focus_glyphs[0]);i++){
+        lv_font_glyph_dsc_t glyph;assert(lv_font_get_glyph_dsc(&luna_cjk_16,&glyph,focus_glyphs[i],0));
+    }
+    assert(!strcmp(lv_label_get_text(focus_time),"25:00"));
+    click_object(focus_presets[1]);assert(!strcmp(lv_label_get_text(focus_time),"45:00"));
+    click_object(focus_presets[2]);assert(!strcmp(lv_label_get_text(focus_time),"60:00"));
+    click_object(focus_presets[0]);save("focus-ready");
+    assert_visible_text_centered(focus_custom);assert_visible_text_centered(focus_start);assert_visible_text_centered(focus_end);
+    click_object(focus_custom);assert(focus_editing&&lv_obj_check_type(focus_keyboard,&lv_keyboard_class));save("focus-keyboard");
+    choose_card(1,0);click(360,668);click(617,668);click(32,100);
+    pointer(550,670,true);pointer(440,670,true);pointer(250,670,false);advance(300);
+    last_touch=test_us-IDLE_US-100000;update(NULL);set_idle(true);
+    assert(active==5&&!idle&&focus_editing&&action_count==focus_actions);
+    click(212,490);click(432,580);assert(focus_editing&&strlen(lv_label_get_text(focus_error))>0);
+    click(212,354);click(360,490);click(432,580);
+    assert(!focus_editing&&focus.state==LUNA_FOCUS_IDLE&&focus.duration_seconds==2400);
+    assert_visible_text_centered(focus_custom);save("focus-custom40");
+    click_object(focus_custom);click(508,354);click(360,354);click(210,580);
+    assert(!focus_editing&&focus.duration_seconds==2400);
+    click_object(focus_custom);assert(!strcmp(lv_textarea_get_text(focus_input),"40"));click(562,126);
+    assert(luna_focus_select(&focus,999));update(NULL);advance(50);assert_visible_text_centered(focus_custom);save("focus-custom999");
+    click_object(focus_presets[0]);
+    test_music.online=false;click_object(focus_start);
+    assert(focus.state==LUNA_FOCUS_RUNNING&&!lv_obj_has_state(focus_start,LV_STATE_DISABLED));
+    assert(lv_obj_has_state(focus_presets[0],LV_STATE_DISABLED));save("focus-running");
+    assert_visible_text_centered(focus_start);assert_visible_text_centered(focus_end);
+    int64_t deadline=focus.deadline_us;
+    choose_card(0,0);advance(100);test_us+=IDLE_US+10000000;update(NULL);set_idle(true);click(32,100);assert(!idle);
+    assert(focus.deadline_us==deadline&&luna_focus_remaining(&focus,test_us)<1500);
+    choose_card(5,0);advance(100);click_object(focus_start);
+    assert(focus.state==LUNA_FOCUS_PAUSED);int64_t paused=focus.remaining_us;
+    test_us+=300000000;update(NULL);assert(focus.remaining_us==paused&&idle);
+    set_idle(false);advance(50);save("focus-paused");assert_visible_text_centered(focus_start);click_object(focus_start);
+    assert(focus.state==LUNA_FOCUS_RUNNING&&focus.remaining_us==paused);
+    luna_setup_ap_request(true);advance(100);assert(setup_visible);
+    test_us=focus.deadline_us;update(NULL);
+    assert(focus.state==LUNA_FOCUS_DONE&&focus.notice&&setup_visible&&!idle);
+    assert(lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN));
+    click(208,539);assert(!setup_visible&&focus.notice);
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(pet_bubble,0)),"休息一下"));save("focus-complete");
+    assert_visible_text_centered(pet_bubble);
+    set_idle(true);update(NULL);
+    assert(idle&&focus.notice&&!lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN));save("focus-complete-idle");
+    luna_setup_ap_request(false);advance(50);set_idle(false);choose_card(5,0);advance(100);
+    assert(!focus.notice&&focus.state==LUNA_FOCUS_DONE);
+    assert_visible_text_centered(focus_start);
+    click_object(focus_start);click_object(focus_end);
+    assert(focus.state==LUNA_FOCUS_IDLE&&luna_focus_remaining(&focus,test_us)==1500);
+    click(617,668);assert(active==0);click(103,668);assert(active==5);
+    click_object(focus_start);set_idle(true);assert(!idle);test_us=focus.deadline_us;update(NULL);
+    assert(!idle&&focus.state==LUNA_FOCUS_DONE&&focus.notice&&!lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN));
+    set_idle(true);update(NULL);assert(idle);
+    save("focus-complete-idle");set_idle(false);choose_card(5,0);advance(50);click_object(focus_end);
+    pointer(500,430,true);pointer(420,430,true);pointer(340,430,true);pointer(250,430,false);advance(300);assert(active==0);
+    pointer(250,430,true);pointer(340,430,true);pointer(420,430,true);pointer(500,430,false);advance(300);assert(active==5);
+    assert(action_count==focus_actions);
+    choose_card(5,0);advance(50);pet_response_until=test_us+1600000;update(NULL);advance(50);
+    assert_visible_text_centered(pet_bubble);save("focus-greeting-centered");
+    puts("PASS rendered-ink center within one pixel: greeting/rest bubbles, custom/default/999-minute labels, start/pause/resume/restart/end including disabled end");
+    puts("PASS B focus, green K2 real LVGL keyboard, modal blocks background clicks/swipes/standby, custom commit/cancel, running blocks manual/auto idle across cards, paused permits idle, completion reminder; no media action");
+    lv_obj_update_layout(root);puts("Native UI assertions passed; rendered six cards, volume and manual/automatic clock");return 0;
 }

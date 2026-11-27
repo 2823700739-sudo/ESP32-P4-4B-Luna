@@ -1,5 +1,5 @@
 // Hardware port of docs/design/preview/{index.html,styles.css,model.mjs}.
-// Five cards with read-only live BLE dashboard and independent Wi-Fi weather.
+// Six cards with read-only live BLE dashboard and independent local focus timer.
 #include <math.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -15,9 +15,11 @@
 #include "luna_weather_config.h"
 #include "luna_time.h"
 #include "luna_ui_motion.h"
+#include "luna_focus.h"
 #include "luna_font_decode.h"
 #include "luna_power.h"
 #include "assets/luna_ui_assets.h"
+#include "src/misc/lv_text_private.h"
 
 #define NIGHT 0x101827
 #define PANEL 0x1c293c
@@ -27,16 +29,26 @@
 #define PEACH 0xffbc82
 #define SKY 0x86ccfa
 #define MINT 0x81debb
-#define CARD_COUNT 5
-static lv_obj_t *root,*cards[5],*nav[5],*nav_icons[5],*nav_names[5],*header,*footer,*edges[2];
+#define CARD_COUNT LUNA_UI_CARD_COUNT
+static lv_obj_t *root,*cards[CARD_COUNT],*nav[CARD_COUNT],*nav_icons[CARD_COUNT],*nav_names[CARD_COUNT],*header,*footer,*edges[2];
 static lv_obj_t *twinkles[6];
 static lv_obj_t *connection,*connection_icon,*clock_hm,*clock_ss,*clock_date,*clock_greeting,*clock_source,*clock_bottom;
 static lv_obj_t *title,*artist,*play,*previous,*next,*play_icon,*record_logo,*music_kicker;
+static lv_obj_t *tonearm,*tonearm_head;
+static lv_point_precise_t tonearm_points[3],tonearm_head_points[2];
+static float tonearm_position;
+static int tonearm_angle=999;
 static lv_obj_t *volume_button,*volume_icon,*volume_popup,*slider,*volume_percent,*mute,*mute_icon;
 static lv_obj_t *weather_city,*weather_temp,*weather_condition,*weather_note,*weather_sun,*weather_cloud,*weather_unknown;
 static lv_obj_t *weather_readings[3],*weather_labels[3],*weather_drops[3],*weather_visual;
-static lv_obj_t *setup_panel,*setup_name,*setup_access,*setup_info;
+static lv_obj_t *setup_overlay,*setup_panel,*setup_name,*setup_access,*setup_info;
 static bool setup_visible,setup_was_active;
+static luna_focus_t focus;
+static lv_obj_t *focus_ring,*focus_time,*focus_status,*focus_hint,*focus_badge;
+static lv_obj_t *focus_presets[3],*focus_start,*focus_end,*focus_custom;
+static lv_obj_t *focus_overlay,*focus_panel,*focus_input,*focus_keyboard,*focus_error;
+static bool focus_editing,focus_replace;
+static lv_font_t focus_key_font;
 static lv_obj_t *pet,*pet_image,*pet_bubble;
 static lv_obj_t *quota_values[2],*quota_bars[2],*quota_kicker,*quota_note,*project_name,*project_label;
 static lv_obj_t *computer_name,*computer_kicker,*computer_note,*gauges[2],*gauge_values[2],*temperatures[2],*memory_values[2],*memory_bars[2];
@@ -98,6 +110,35 @@ static lv_obj_t *text(lv_obj_t *p,const char *value,int x,int y,const lv_font_t 
     lv_obj_set_style_text_font(o,font,0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
     lv_obj_set_style_text_line_space(o,0,0);return o;
 }
+// Center the visible glyph bounds, rather than the CJK font's padded line box.
+// Only the single-line focus button labels and pet bubble use this helper.
+static void center_label_ink(lv_obj_t *label)
+{
+    const lv_font_t *font=lv_obj_get_style_text_font(label,0);
+    const char *value=lv_label_get_text(label);
+    int32_t left=INT32_MAX,top=INT32_MAX,right=INT32_MIN,bottom=INT32_MIN,pen=0;
+    uint32_t index=0;
+    while(value[index]){
+        uint32_t letter=lv_text_encoded_next(value,&index),peek=index;
+        uint32_t next=value[index]?lv_text_encoded_next(value,&peek):0;
+        lv_font_glyph_dsc_t glyph;
+        if(!lv_font_get_glyph_dsc(font,&glyph,letter,next))continue;
+        if(glyph.box_w&&glyph.box_h){
+            int32_t x=pen+glyph.ofs_x;
+            int32_t y=font->line_height-font->base_line-glyph.box_h-glyph.ofs_y;
+            if(x<left)left=x;
+            if(y<top)top=y;
+            if(x+(int32_t)glyph.box_w>right)right=x+glyph.box_w;
+            if(y+(int32_t)glyph.box_h>bottom)bottom=y+glyph.box_h;
+        }
+        pen+=glyph.adv_w+lv_obj_get_style_text_letter_space(label,0);
+    }
+    if(left==INT32_MAX)return;
+    lv_obj_t *parent=lv_obj_get_parent(label);
+    lv_obj_update_layout(parent);lv_obj_set_align(label,LV_ALIGN_TOP_LEFT);
+    lv_obj_set_pos(label,(lv_obj_get_width(parent)-(right-left))/2-left,
+                         (lv_obj_get_height(parent)-(bottom-top))/2-top);
+}
 static lv_obj_t *bounded(lv_obj_t *p,const char *value,int x,int y,int w,const lv_font_t *font,uint32_t color,bool right)
 {
     lv_obj_t *o=text(p,value,x,y,font,color);lv_obj_set_width(o,w);lv_label_set_long_mode(o,LV_LABEL_LONG_MODE_DOTS);
@@ -133,7 +174,9 @@ static void card_arrived(lv_anim_t *a)
 }
 static void choose_card(unsigned index,int direction)
 {
+    if(setup_visible||focus_editing)return;
     if(index>=CARD_COUNT )return;
+    if(index==5)luna_focus_ack(&focus);
     if(ui_timer&&index==active){lv_obj_add_flag(volume_popup,LV_OBJ_FLAG_HIDDEN);return;}
     for(unsigned i=0;i<CARD_COUNT;i++) {
         lv_anim_delete(cards[i],NULL);lv_obj_set_pos(cards[i],65,135);lv_obj_set_style_opa(cards[i],255,0);
@@ -186,6 +229,7 @@ static bool within(lv_obj_t *o,lv_obj_t *ancestor)
 }
 static void set_idle(bool value)
 {
+    if(value&&(setup_visible||focus_editing||focus.state==LUNA_FOCUS_RUNNING))return;
     // Restore the active workload profile before cards; clock/brightness stay fixed.
     if(!value)luna_power_set_idle(false);
     idle=value;blank_press=false;slider_drag=false;
@@ -197,7 +241,7 @@ static void set_idle(bool value)
     for(unsigned i=0;i<6;i++)lv_obj_set_flag(twinkles[i],LV_OBJ_FLAG_HIDDEN,value);
     lv_obj_set_flag(pet,LV_OBJ_FLAG_HIDDEN,value);lv_obj_add_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN);
     last_clock=0;last_frame=0;last_touch=esp_timer_get_time();
-    if(!value){last_weather=0;last_dashboard=0;}
+    if(!value){last_weather=0;last_dashboard=0;music_initialized=false;}
     if(ui_timer){lv_timer_set_period(ui_timer,value?IDLE_UI_MS:ACTIVE_UI_MS);lv_timer_ready(ui_timer);}
     lv_timer_t *refresh=lv_display_get_refr_timer(lv_obj_get_display(root));
     if(refresh){lv_timer_set_period(refresh,value?IDLE_REFRESH_MS:ACTIVE_REFRESH_MS);lv_timer_ready(refresh);}
@@ -227,6 +271,7 @@ static void screen_touch(lv_event_t *e)
 {
     lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_PRESSED||code==LV_EVENT_PRESSING)last_touch=esp_timer_get_time();
+    if(setup_visible||focus_editing){blank_press=false;return;}
     lv_indev_t *in=lv_indev_active();
     if(code==LV_EVENT_PRESSING&&in){
         lv_point_t p;lv_indev_get_point(in,&p);
@@ -262,7 +307,7 @@ static void slider_event(lv_event_t *e)
 }
 static void gesture(lv_event_t *e)
 {
-    (void)e;blank_press=false;press_moved=true;if(idle||slider_drag||pet_held||setup_visible)return;
+    (void)e;blank_press=false;press_moved=true;if(idle||slider_drag||pet_held||setup_visible||focus_editing)return;
     lv_indev_t *in=lv_indev_active();if(!in)return;
     lv_dir_t dir=lv_indev_get_gesture_dir(in);
     int delta=dir==LV_DIR_LEFT?1:dir==LV_DIR_RIGHT?-1:0;
@@ -290,6 +335,7 @@ static void card_header(unsigned n,const char *name,const lv_image_dsc_t *glyph,
     if(n==1)music_kicker=k;
     if(n==3){quota_kicker=k;lv_obj_set_style_text_font(k,&luna_cjk_16,0);}
     if(n==4){computer_kicker=k;lv_obj_set_style_text_font(k,&luna_cjk_16,0);}
+    if(n==5)lv_obj_set_style_text_font(k,&luna_cjk_16,0);
     if(n==2){
         weather_city=k;lv_obj_set_style_text_font(k,&luna_cjk_28,0);lv_obj_set_y(k,27);
         // Native full Han size, no raster scaling. Long names remain bounded.
@@ -319,6 +365,24 @@ static void build_clock(void)
     clock_source=bounded(source,"等待蓝牙 / Wi-Fi NTP 校时",24,7,264,&luna_cjk_13,SUB,false);
     bottom(0,"LOCAL CLOCK","等待有效时间");
 }
+static void paint_tonearm(float position)
+{
+    /* Tiny line objects draw directly; no rotating full-card image/layer. */
+    float eased=position*position*(3-2*position);
+    int angle=(int)lroundf(-420*(1-eased));
+    if(angle==tonearm_angle)return;
+    tonearm_angle=angle;
+    float radians=angle*(float)M_PI/1800,cs=cosf(radians),sn=sinf(radians);
+    const float points[][2]={{0,0},{-12,54},{-34,78},{-27,70},{-37,81}};
+    lv_point_precise_t rotated[5];
+    for(unsigned i=0;i<5;i++)rotated[i]=(lv_point_precise_t){
+        lroundf(183+points[i][0]*cs-points[i][1]*sn),
+        lroundf(76+points[i][0]*sn+points[i][1]*cs)};
+    memcpy(tonearm_points,rotated,sizeof(tonearm_points));
+    memcpy(tonearm_head_points,&rotated[3],sizeof(tonearm_head_points));
+    lv_line_set_points(tonearm,tonearm_points,3);
+    lv_line_set_points(tonearm_head,tonearm_head_points,2);
+}
 static void build_music(void)
 {
     card_header(1,"MUSIC",&luna_icon_play_24,"等待电脑同步",PEACH);
@@ -333,33 +397,218 @@ static void build_music(void)
     lv_obj_t *center=box(disc,49,49,66,66,PEACH,LV_RADIUS_CIRCLE);lv_obj_remove_flag(center,LV_OBJ_FLAG_CLICKABLE);
     record_logo=image(disc,&luna_icon_moon_30,67,67,30,0x533c37);lv_image_set_pivot(record_logo,15,15);
     lv_obj_t *dot=box(disc,79,79,6,6,0x201d2b,LV_RADIUS_CIRCLE);lv_obj_remove_flag(dot,LV_OBJ_FLAG_CLICKABLE);
+    tonearm=lv_line_create(cards[1]);lv_obj_set_pos(tonearm,0,0);
+    lv_obj_set_style_line_width(tonearm,4,0);lv_obj_set_style_line_color(tonearm,lv_color_hex(0xd3dced),0);
+    lv_obj_set_style_line_rounded(tonearm,true,0);lv_obj_remove_flag(tonearm,LV_OBJ_FLAG_CLICKABLE);
+    tonearm_head=lv_line_create(cards[1]);lv_obj_set_pos(tonearm_head,0,0);
+    lv_obj_set_style_line_width(tonearm_head,9,0);lv_obj_set_style_line_color(tonearm_head,lv_color_hex(PEACH),0);
+    lv_obj_set_style_line_rounded(tonearm_head,true,0);lv_obj_remove_flag(tonearm_head,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *pivot=box(cards[1],174,67,18,18,0x101521,LV_RADIUS_CIRCLE);
+    lv_obj_set_style_border_width(pivot,2,0);lv_obj_set_style_border_color(pivot,lv_color_hex(0x50617c),0);
+    lv_obj_remove_flag(pivot,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *pin=box(pivot,6,6,6,6,PEACH,LV_RADIUS_CIRCLE);lv_obj_remove_flag(pin,LV_OBJ_FLAG_CLICKABLE);
+    paint_tonearm(0);
     lv_obj_t *caption=text(cards[1],"LUNA / FIXED PLAYER",228,118,&luna_cjk_10,PEACH);
     lv_obj_set_style_text_letter_space(caption,2,0);
     title=text(cards[1],"等待音乐",228,137,&luna_cjk_28,TEXT);
     lv_obj_set_width(title,330);lv_obj_set_height(title,LV_SIZE_CONTENT);
     lv_obj_set_style_max_height(title,84,0);lv_label_set_long_mode(title,LV_LABEL_LONG_MODE_DOTS);
     artist=bounded(cards[1],"连接电脑，打开音乐播放器",228,192,330,&luna_cjk_16,SUB,false);
-    previous=button(cards[1],142,284,48,48,0x253145,255,media_click,"music.previous");
-    image(previous,&luna_icon_prev_24,12,12,24,TEXT);
-    play=button(cards[1],226,272,72,72,PEACH,255,media_click,NULL);
-    play_icon=image(play,&luna_icon_play_30,21,21,30,0x332632);
-    next=button(cards[1],334,284,48,48,0x253145,255,media_click,"music.next");
-    image(next,&luna_icon_next_24,12,12,24,TEXT);
-    lv_obj_set_x(previous,175);lv_obj_set_x(play,259);lv_obj_set_x(next,367);
+    previous=button(cards[1],171,298,56,56,0x253145,255,media_click,"music.previous");
+    image(previous,&luna_icon_prev_24,16,16,24,TEXT);
+    play=button(cards[1],253,284,84,84,PEACH,255,media_click,NULL);
+    play_icon=image(play,&luna_icon_play_30,27,27,30,0x332632);
+    next=button(cards[1],363,298,56,56,0x253145,255,media_click,"music.next");
+    image(next,&luna_icon_next_24,16,16,24,TEXT);
     volume_button=button(cards[1],510,378,48,48,0x253145,255,volume_toggle,NULL);
     volume_icon=image(volume_button,&luna_icon_volume_24,12,12,24,SUB);
 }
+static void show_focus_keyboard(bool visible)
+{
+    if(visible&&(setup_visible||focus.state==LUNA_FOCUS_RUNNING||focus.state==LUNA_FOCUS_PAUSED))return;
+    focus_editing=visible;blank_press=false;press_moved=true;pet_held=false;slider_drag=false;
+    last_touch=esp_timer_get_time();
+    lv_obj_set_flag(focus_overlay,LV_OBJ_FLAG_HIDDEN,!visible);
+    if(visible){
+        char value[16];snprintf(value,sizeof(value),"%u",focus.duration_seconds/60);
+        lv_textarea_set_text(focus_input,value);lv_textarea_set_cursor_pos(focus_input,LV_TEXTAREA_CURSOR_LAST);
+        lv_label_set_text(focus_error,"");focus_replace=true;
+        lv_obj_add_flag(volume_popup,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(focus_overlay);
+    }
+}
+static void focus_edit_close(lv_event_t *event)
+{
+    if((uintptr_t)lv_event_get_user_data(event)){
+        const char *value=lv_textarea_get_text(focus_input);
+        unsigned minutes=(unsigned)strtoul(value,NULL,10);
+        if(!value[0]||!luna_focus_select(&focus,minutes)){
+            lv_label_set_text(focus_error,"请输入 1-999 分钟");return;
+        }
+    }
+    show_focus_keyboard(false);if(ui_timer)lv_timer_ready(ui_timer);
+}
+static void focus_key(lv_event_t *event)
+{
+    uint32_t selected=lv_buttonmatrix_get_selected_button(focus_keyboard);
+    if(selected==LV_BUTTONMATRIX_BUTTON_NONE)return;
+    const char *key=lv_buttonmatrix_get_button_text(focus_keyboard,selected);
+    if(!key)return;
+    if(!strcmp(key,"清空"))lv_textarea_set_text(focus_input,"");
+    else if(!strcmp(key,LV_SYMBOL_BACKSPACE))lv_textarea_delete_char(focus_input);
+    else if(key[0]>='0'&&key[0]<='9'&&!key[1]){
+        if(focus_replace)lv_textarea_set_text(focus_input,"");
+        lv_textarea_add_text(focus_input,key);
+    }
+    focus_replace=false;lv_label_set_text(focus_error,"");
+}
+static void build_focus_keyboard(void)
+{
+    focus_overlay=box(root,0,0,720,720,NIGHT,0);lv_obj_set_style_bg_opa(focus_overlay,185,0);
+    lv_obj_add_flag(focus_overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(focus_overlay,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    focus_panel=box(focus_overlay,112,80,496,560,0x222d43,32);
+    lv_obj_remove_flag(focus_panel,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    text(focus_panel,"FOCUS TIMER",32,25,&luna_cjk_13,MINT);
+    text(focus_panel,"自定义时长",32,52,&luna_cjk_28,TEXT);
+    lv_obj_t *close=button(focus_panel,428,24,44,44,0x303b52,255,focus_edit_close,NULL);
+    lv_obj_center(text(close,LV_SYMBOL_CLOSE,0,0,&lv_font_montserrat_24,SUB));
+    focus_input=lv_textarea_create(focus_panel);lv_obj_remove_style_all(focus_input);
+    lv_obj_set_pos(focus_input,127,99);lv_obj_set_size(focus_input,142,52);
+    lv_textarea_set_one_line(focus_input,true);lv_textarea_set_max_length(focus_input,3);
+    lv_textarea_set_accepted_chars(focus_input,"0123456789");
+    lv_obj_set_style_text_font(focus_input,&lv_font_montserrat_40,0);
+    lv_obj_set_style_text_color(focus_input,lv_color_hex(TEXT),0);
+    lv_obj_set_style_text_align(focus_input,LV_TEXT_ALIGN_RIGHT,0);
+    lv_obj_set_style_bg_color(focus_input,lv_color_hex(MINT),LV_PART_CURSOR);
+    lv_obj_set_style_bg_opa(focus_input,255,LV_PART_CURSOR);
+    lv_obj_set_style_width(focus_input,2,LV_PART_CURSOR);
+    lv_obj_remove_flag(focus_input,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+    text(focus_panel,"分钟",285,119,&luna_cjk_16,SUB);
+    box(focus_panel,54,152,388,2,MINT,0);
+    focus_error=bounded(focus_panel,"",54,155,388,&luna_cjk_16,PEACH,false);
+    static const char * const map[]={"1","2","3","\n","4","5","6","\n","7","8","9","\n","清空","0",LV_SYMBOL_BACKSPACE,""};
+    static const lv_buttonmatrix_ctrl_t controls[]={1,1,1,1,1,1,1,1,1,1,1,1};
+    focus_keyboard=lv_keyboard_create(focus_panel);lv_obj_remove_style_all(focus_keyboard);
+    lv_obj_set_pos(focus_keyboard,32,178);lv_obj_set_size(focus_keyboard,432,260);
+    lv_keyboard_set_map(focus_keyboard,LV_KEYBOARD_MODE_USER_1,map,controls);
+    lv_keyboard_set_mode(focus_keyboard,LV_KEYBOARD_MODE_USER_1);
+    lv_obj_remove_event_cb(focus_keyboard,lv_keyboard_def_event_cb);
+    lv_obj_add_event_cb(focus_keyboard,focus_key,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_obj_remove_flag(focus_keyboard,LV_OBJ_FLAG_GESTURE_BUBBLE|LV_OBJ_FLAG_SCROLLABLE);
+    focus_key_font=lv_font_montserrat_28;focus_key_font.fallback=&luna_cjk_16;
+    lv_obj_set_style_text_font(focus_keyboard,&focus_key_font,LV_PART_ITEMS);
+    lv_obj_set_style_text_color(focus_keyboard,lv_color_hex(TEXT),LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(focus_keyboard,lv_color_hex(0x344059),LV_PART_ITEMS);
+    lv_obj_set_style_bg_opa(focus_keyboard,255,LV_PART_ITEMS);
+    lv_obj_set_style_radius(focus_keyboard,29,LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(focus_keyboard,lv_color_hex(0x42695f),LV_PART_ITEMS|LV_STATE_PRESSED);
+    lv_obj_set_style_pad_row(focus_keyboard,11,0);lv_obj_set_style_pad_column(focus_keyboard,11,0);
+    lv_obj_t *cancel=button(focus_panel,32,473,132,55,0x303b52,255,focus_edit_close,NULL);
+    lv_obj_center(text(cancel,"取消",0,0,&luna_cjk_16,SUB));
+    lv_obj_t *confirm=button(focus_panel,176,473,288,55,MINT,255,focus_edit_close,(void*)1);
+    lv_obj_center(text(confirm,"确认时长",0,0,&luna_cjk_16,0x142e28));
+    lv_obj_add_flag(focus_overlay,LV_OBJ_FLAG_HIDDEN);
+}
+static void focus_action(lv_event_t *event)
+{
+    if(focus_editing||setup_visible)return;
+    unsigned action=(unsigned)(uintptr_t)lv_event_get_user_data(event);
+    int64_t now=esp_timer_get_time();last_touch=now;
+    if(action==1){if(focus.state==LUNA_FOCUS_RUNNING)luna_focus_pause(&focus,now);else luna_focus_start(&focus,now);}
+    else if(action==3)luna_focus_end(&focus);
+    else if(action==4)show_focus_keyboard(true);
+    else luna_focus_select(&focus,action);
+    if(ui_timer)lv_timer_ready(ui_timer);
+}
+static void build_focus(void)
+{
+    card_header(5,"FOCUS",&luna_icon_moon_30,"",MINT);
+    focus_status=bounded(cards[5],"准备专注",332,33,226,&luna_cjk_16,MINT,true);
+    focus_hint=bounded(cards[5],"剩余专注时间",70,110,450,&luna_cjk_16,SUB,false);
+    lv_obj_set_style_text_align(focus_hint,LV_TEXT_ALIGN_CENTER,0);
+    focus_time=bounded(cards[5],"25:00",50,157,490,&luna_digits_101,TEXT,false);
+    lv_obj_set_style_text_align(focus_time,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_set_style_text_letter_space(focus_time,-4,0);
+    lv_obj_t *track=box(cards[5],70,293,450,5,0x29394f,3);
+    lv_obj_remove_flag(track,LV_OBJ_FLAG_CLICKABLE);
+    focus_ring=box(track,0,0,450,5,MINT,3);lv_obj_remove_flag(focus_ring,LV_OBJ_FLAG_CLICKABLE);
+    const unsigned durations[]={25,45,60};
+    for(unsigned i=0;i<3;i++){
+        focus_presets[i]=button(cards[5],92+i*84,317,75,34,0x29394f,255,focus_action,(void*)(uintptr_t)durations[i]);
+        char label[20];snprintf(label,sizeof(label),"%u 分钟",durations[i]);
+        lv_obj_center(text(focus_presets[i],label,0,0,&luna_cjk_13,TEXT));
+    }
+    focus_custom=button(cards[5],344,317,154,34,0x29394f,255,focus_action,(void*)4);
+    center_label_ink(text(focus_custom,"自定义",0,0,&luna_cjk_16,TEXT));
+    lv_obj_set_ext_click_area(focus_custom,5);
+    focus_start=button(cards[5],141,376,188,48,MINT,255,focus_action,(void*)1);
+    focus_end=button(cards[5],345,376,104,48,0x29394f,255,focus_action,(void*)3);
+    center_label_ink(text(focus_start,"开始",0,0,&luna_cjk_16,0x142e28));
+    center_label_ink(text(focus_end,"结束",0,0,&luna_cjk_16,TEXT));
+}
+static void update_focus(int64_t now)
+{
+    static int shown_state=-1;
+    static unsigned shown_remaining,shown_duration;
+    bool busy=focus.state==LUNA_FOCUS_RUNNING||focus.state==LUNA_FOCUS_PAUSED;
+    lv_obj_set_flag(focus_badge,LV_OBJ_FLAG_HIDDEN,!busy&&!focus.notice);
+    lv_obj_set_style_bg_color(focus_badge,lv_color_hex(focus.notice?PEACH:MINT),0);
+    if(idle||active!=5)return;
+    unsigned remaining=luna_focus_remaining(&focus,now);
+    if(shown_state==(int)focus.state&&shown_remaining==remaining&&shown_duration==focus.duration_seconds)return;
+    shown_state=focus.state;shown_remaining=remaining;shown_duration=focus.duration_seconds;
+    lv_label_set_text_fmt(focus_time,"%02u:%02u",remaining/60,remaining%60);
+    const char *states[]={"准备专注","专注中","已暂停","专注完成"};
+    lv_label_set_text(focus_status,states[focus.state]);
+    lv_obj_set_width(focus_ring,(int)((uint64_t)remaining*450/focus.duration_seconds));
+    disabled(focus_end,focus.state==LUNA_FOCUS_IDLE);
+    lv_obj_t *start_label=lv_obj_get_child(focus_start,0);
+    lv_label_set_text(start_label,focus.state==LUNA_FOCUS_RUNNING?"暂停":focus.state==LUNA_FOCUS_PAUSED?"继续":focus.state==LUNA_FOCUS_DONE?"再来一轮":"开始");center_label_ink(start_label);
+    const unsigned minutes[]={25,45,60};bool preset=false;
+    for(unsigned i=0;i<3;i++){
+        disabled(focus_presets[i],busy);
+        bool selected=focus.duration_seconds==minutes[i]*60;preset|=selected;
+        lv_obj_set_style_bg_color(focus_presets[i],lv_color_hex(selected?0x29443f:0x29394f),0);
+        lv_obj_set_style_text_color(lv_obj_get_child(focus_presets[i],0),lv_color_hex(selected?MINT:TEXT),0);
+    }
+    disabled(focus_custom,busy);
+    lv_obj_set_style_bg_color(focus_custom,lv_color_hex(preset?0x29394f:0x29443f),0);
+    lv_obj_t *custom_label=lv_obj_get_child(focus_custom,0);
+    if(preset)lv_label_set_text(custom_label,"自定义");
+    else lv_label_set_text_fmt(custom_label,"自定义 · %u 分",focus.duration_seconds/60);
+    lv_obj_set_style_text_color(custom_label,lv_color_hex(preset?TEXT:MINT),0);center_label_ink(custom_label);
+}
+
+static void show_setup(bool visible)
+{
+    if(visible&&focus_editing)show_focus_keyboard(false);
+    setup_visible=visible;last_touch=esp_timer_get_time();blank_press=false;
+    if(visible){
+        if(idle)set_idle(false);
+        slider_drag=pet_held=false;
+        lv_obj_add_flag(volume_popup,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(setup_overlay);
+    }
+    lv_obj_set_flag(setup_overlay,LV_OBJ_FLAG_HIDDEN,!visible);
+    lv_obj_set_flag(setup_panel,LV_OBJ_FLAG_HIDDEN,!visible);
+}
 static void setup_click(lv_event_t *e)
 {
-    (void)e;setup_visible=true;last_touch=esp_timer_get_time();
+    (void)e;show_setup(true);
     luna_setup_ap_request(true);
 }
-static void setup_hide(lv_event_t *e) { (void)e;setup_visible=false; }
-static void setup_close(lv_event_t *e) { (void)e;setup_visible=false;luna_setup_ap_request(false); }
+static void setup_hide(lv_event_t *e) { (void)e;show_setup(false); }
+static void setup_close(lv_event_t *e) { (void)e;show_setup(false);luna_setup_ap_request(false); }
 
 static void build_setup_panel(void)
 {
-    setup_panel=box(root,65,110,590,500,0x1c293c,24);
+    setup_overlay=box(root,0,0,720,720,NIGHT,0);
+    lv_obj_set_style_bg_opa(setup_overlay,LV_OPA_60,0);
+    lv_obj_add_flag(setup_overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(setup_overlay,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    setup_panel=box(setup_overlay,65,110,590,500,0x1c293c,24);
     lv_obj_remove_flag(setup_panel,LV_OBJ_FLAG_GESTURE_BUBBLE);
     text(setup_panel,"Wi-Fi 与天气设置",28,28,&luna_cjk_28,TEXT);
     text(setup_panel,"1. 手机连接下方热点",28,84,&luna_cjk_20,SUB);
@@ -373,14 +622,15 @@ static void build_setup_panel(void)
     lv_obj_center(text(hide,"暂时隐藏",0,0,&luna_cjk_20,TEXT));
     lv_obj_center(text(stop,"关闭热点",0,0,&luna_cjk_20,TEXT));
     lv_obj_add_flag(setup_panel,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(setup_overlay,LV_OBJ_FLAG_HIDDEN);
 }
 
 static void update_setup(void)
 {
     luna_setup_ap_state_t state={0};
     if (!luna_setup_ap_snapshot(&state)) return;
-    if (state.active && !setup_was_active) {setup_visible=true;if(idle)set_idle(false);}
-    if (!state.active && setup_was_active) setup_visible=false;
+    if (state.active && !setup_was_active) show_setup(true);
+    if (!state.active && setup_was_active) show_setup(false);
     setup_was_active=state.active;
     lv_label_set_text(setup_name,state.active?state.ssid:"");
     lv_label_set_text(setup_access,state.active?"手机提示无互联网时，请保持连接":"");
@@ -388,6 +638,7 @@ static void update_setup(void)
     else if (state.active) lv_label_set_text_fmt(setup_info,"剩余 %u 分钟，保存并联网后自动关闭",(state.remaining_seconds+59)/60);
     else lv_label_set_text(setup_info,"正在开启配置热点...");
     lv_obj_set_flag(setup_panel,LV_OBJ_FLAG_HIDDEN,!setup_visible||idle);
+    lv_obj_set_flag(setup_overlay,LV_OBJ_FLAG_HIDDEN,!setup_visible||idle);
     luna_weather_config_clear(&state,sizeof(state));
 }
 
@@ -630,6 +881,27 @@ static void update_clock(int64_t now)
     lv_label_set_text(clock_source,source);
     lv_label_set_text(clock_bottom,valid?"保电时，本地继续走时":"等待有效时间");
 }
+static void update_pet_bubble(int64_t now)
+{
+    bool visible=!setup_visible&&!focus_editing&&(focus.notice||(!idle&&now<pet_response_until));
+    bool was_hidden=lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN);
+    unsigned width=focus.notice?104:64;
+    lv_obj_t *label=lv_obj_get_child(pet_bubble,0);
+    const char *message=focus.notice?"休息一下":"喵～";
+    bool changed=lv_obj_get_width(pet_bubble)!=(int)width||strcmp(lv_label_get_text(label),message);
+    if(lv_obj_get_width(pet_bubble)!=(int)width)lv_obj_set_width(pet_bubble,width);
+    lv_label_set_text(label,message);
+    if(changed||was_hidden)center_label_ink(label);
+    lv_obj_set_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN,!visible);
+    if(!visible)return;
+    if(was_hidden)lv_obj_move_foreground(pet_bubble);
+    int x=idle?508:lv_obj_get_x(pet)+18,y=idle?620:lv_obj_get_y(pet)-34;
+    if(x>720-8-(int)width)x=720-8-(int)width;
+    if(x<8)x=8;
+    if(y<8)y=lv_obj_get_y(pet)+72;
+    if(y>680)y=680;
+    lv_obj_set_pos(pet_bubble,x,y);
+}
 static void update_pet(int64_t now,int64_t elapsed)
 {
     bool responding=now<pet_response_until;
@@ -645,15 +917,7 @@ static void update_pet(int64_t now,int64_t elapsed)
     lv_obj_set_pos(pet,x,y);
     // Image mirror isn't needed for a front-facing sit/response frame.
     lv_image_set_src(pet_image,pos.left&&frame<4?pet_left_frames[frame]:pet_frames[frame]);
-    lv_obj_set_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN,!responding);
-    if(responding){
-        int bx=x+18,by=y-34;
-        if(bx>648)bx=648;
-        if(bx<8)bx=8;
-        if(by<8)by=y+72;
-        if(by>680)by=680;
-        lv_obj_set_pos(pet_bubble,bx,by);
-    }
+    update_pet_bubble(now);
 }
 static void update_sleep_zzz(int64_t now)
 {
@@ -670,11 +934,13 @@ static void update(lv_timer_t *timer)
     (void)timer;int64_t now=esp_timer_get_time(),elapsed=last_frame?now-last_frame:0;last_frame=now;
     if(elapsed<0)elapsed=0;
     if(elapsed>100000)elapsed=100000;
-    if(!idle&&!slider_drag&&!pet_held&&now-last_touch>=IDLE_US)set_idle(true);
+    if(luna_focus_tick(&focus,now))last_touch=now;
+    if(!idle&&!setup_visible&&!focus_editing&&!slider_drag&&!pet_held&&now-last_touch>=IDLE_US)set_idle(true);
     update_setup();
+    update_focus(now);
     // Radio collectors continue caching real state. Do not lay out hidden
     // weather/quotas/music or animate the record while in always-bright standby.
-    if(idle){update_clock(now);update_sleep_zzz(now);return;}
+    if(idle){update_clock(now);update_sleep_zzz(now);update_pet_bubble(now);return;}
     if(active==2)update_weather(now);
     if(active==0)update_clock(now);
     if(active==3||active==4)update_dashboard(now);
@@ -690,6 +956,7 @@ static void update(lv_timer_t *timer)
         connection_initialized=true;connection_online=current.online;
         }
         bool changed=!music_initialized||!music_display_equal(&current,&shown_music);
+        bool motion_first=!music_initialized;
         if(active==1&&(changed||slider_drag)){
         const char *t=current.available?current.title:"等待音乐",*a=current.available?current.artist:"连接电脑，打开音乐播放器";
         lv_label_set_text(title,t);lv_label_set_text(artist,a);
@@ -706,14 +973,23 @@ static void update(lv_timer_t *timer)
         lv_image_set_src(volume_icon,current.muted?&luna_icon_mute_24:&luna_icon_volume_24);
         shown_music=current;music_initialized=true;
         }
-        if(!idle&&active==1&&current.online&&current.playing)record_angle=fmod(record_angle+elapsed/1000000.0*200,3600);
-        lv_image_set_rotation(record_logo,(int)record_angle);
+        if(active==1){
+            bool playing=current.online&&current.available&&current.playing;
+            float target=playing?1:0,step=elapsed/300000.0f;
+            if(motion_first)tonearm_position=target;
+            else if(tonearm_position<target)tonearm_position=fminf(target,tonearm_position+step);
+            else if(tonearm_position>target)tonearm_position=fmaxf(target,tonearm_position-step);
+            paint_tonearm(tonearm_position);
+            if(playing)record_angle=fmod(record_angle+elapsed/1000000.0*200,3600);
+            if(lv_image_get_rotation(record_logo)!=(int)record_angle)lv_image_set_rotation(record_logo,(int)record_angle);
+        }
     }
     if(!idle)update_pet(now,elapsed);
 }
 void luna_music_ui_start(lv_obj_t *screen)
 {
     luna_font_decode_init();
+    luna_focus_init(&focus);
     root=box(screen,0,0,720,720,NIGHT,0);
     // Critical: stop GESTURE_BUBBLE here, otherwise LVGL sends the swipe to screen.
     lv_obj_remove_flag(root,LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -732,30 +1008,31 @@ void luna_music_ui_start(lv_obj_t *screen)
     lv_obj_t *badge=box(header,420,5,170,38,0x182235,18);
     connection_icon=image(badge,&luna_icon_bt_24,12,10,18,SUB);
     connection=bounded(badge,"蓝牙 · 未连接",37,9,123,&luna_cjk_13,SUB,false);
-    for(unsigned i=0;i<5;i++){
+    for(unsigned i=0;i<CARD_COUNT;i++){
         cards[i]=box(root,65,135,590,450,PANEL,32);lv_obj_set_style_border_width(cards[i],1,0);
         lv_obj_set_style_border_color(cards[i],lv_color_hex(0x344357),0);lv_obj_set_style_clip_corner(cards[i],true,0);
         lv_obj_set_style_shadow_width(cards[i],28,0);lv_obj_set_style_shadow_offset_y(cards[i],12,0);
         lv_obj_set_style_shadow_color(cards[i],lv_color_hex(0),0);lv_obj_set_style_shadow_opa(cards[i],34,0);
         lv_obj_set_style_transform_pivot_x(cards[i],295,0);lv_obj_set_style_transform_pivot_y(cards[i],225,0);
     }
-    build_clock();build_music();build_weather();build_quota();build_computer();
+    build_clock();build_music();build_weather();build_quota();build_computer();build_focus();
     footer=box(root,79,639,562,58,NIGHT,0);lv_obj_set_style_bg_opa(footer,0,0);
     for(unsigned i=0;i<2;i++){
         lv_obj_t *arrow=button(footer,i?514:0,5,48,48,0x182235,255,arrow_click,(void *)(intptr_t)(i?1:-1));
         lv_obj_t *glyph=image(arrow,&luna_icon_chev_24,i?14:34,i?14:34,20,SUB);
         if(!i){lv_image_set_pivot(glyph,0,0);lv_image_set_rotation(glyph,1800);}
     }
-    const char *names[]={"时钟","音乐","天气","额度","电脑"};
-    const lv_image_dsc_t *glyphs[]={&luna_icon_clock_24,&luna_icon_play_24,&luna_icon_weather_24,&luna_icon_code_24,&luna_icon_computer_24};
-    for(unsigned i=0;i<5;i++){
-        nav[i]=button(footer,117+i*66,0,64,58,MOON,0,nav_click,(void *)(uintptr_t)i);
+    const char *names[]={"时钟","音乐","天气","额度","电脑","专注"};
+    const lv_image_dsc_t *glyphs[]={&luna_icon_clock_24,&luna_icon_play_24,&luna_icon_weather_24,&luna_icon_code_24,&luna_icon_computer_24,&luna_icon_moon_30};
+    for(unsigned i=0;i<CARD_COUNT;i++){
+        nav[i]=button(footer,84+i*66,0,64,58,MOON,0,nav_click,(void *)(uintptr_t)i);
         lv_obj_set_style_radius(nav[i],20,0);
         nav_icons[i]=image(nav[i],glyphs[i],20,4,24,0x71829c);
         // CJK16 has a 24px line box, not 16px; keep its full height in 58px.
         nav_names[i]=bounded(nav[i],names[i],0,32,64,&luna_cjk_16,0x71829c,false);
         lv_obj_set_style_text_align(nav_names[i],LV_TEXT_ALIGN_CENTER,0);
     }
+    focus_badge=box(nav[5],50,4,6,6,MINT,LV_RADIUS_CIRCLE);lv_obj_remove_flag(focus_badge,LV_OBJ_FLAG_CLICKABLE);
     pet=button(root,78,73,72,72,NIGHT,0,NULL,NULL);lv_obj_set_style_bg_opa(pet,0,LV_STATE_PRESSED);
     lv_obj_add_flag(pet,LV_OBJ_FLAG_OVERFLOW_VISIBLE);lv_obj_remove_flag(pet,LV_OBJ_FLAG_GESTURE_BUBBLE);
     pet_image=image(pet,&luna_pet_0,0,0,0,UINT32_MAX);lv_image_set_pivot(pet_image,36,36);
@@ -764,22 +1041,22 @@ void luna_music_ui_start(lv_obj_t *screen)
     pet_bubble=box(root,96,39,64,32,0xd7caee,12);
     lv_obj_remove_flag(pet_bubble,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_t *greeting=text(pet_bubble,"喵～",0,0,&luna_cjk_16,0x312744);
-    lv_obj_center(greeting);
+    center_label_ink(greeting);
     lv_obj_add_event_cb(pet,pet_event,LV_EVENT_ALL,NULL);
-    volume_popup=box(root,497,257,142,310,0x29394f,22);
+    volume_popup=box(root,504,247,128,320,0x29394f,22);
     lv_obj_set_style_border_width(volume_popup,1,0);lv_obj_set_style_border_color(volume_popup,lv_color_hex(0x4a576b),0);
     lv_obj_remove_flag(volume_popup,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    mute=button(volume_popup,50,10,42,42,0x253145,255,media_click,"music.mute");
+    mute=button(volume_popup,43,10,42,42,0x253145,255,media_click,"music.mute");
     mute_icon=image(mute,&luna_icon_volume_24,9,9,24,SUB);
-    volume_percent=bounded(volume_popup,"--%",16,59,110,&lv_font_montserrat_28,PEACH,false);
+    volume_percent=bounded(volume_popup,"--%",9,59,110,&lv_font_montserrat_28,PEACH,false);
     lv_obj_set_style_text_align(volume_percent,LV_TEXT_ALIGN_CENTER,0);
-    slider=lv_slider_create(volume_popup);lv_obj_set_pos(slider,66,110);lv_obj_set_size(slider,10,148);
+    slider=lv_slider_create(volume_popup);lv_obj_set_pos(slider,60,103);lv_obj_set_size(slider,8,192);
+    lv_obj_set_ext_click_area(slider,14);
     lv_slider_set_range(slider,0,100);lv_obj_set_style_bg_color(slider,lv_color_hex(PEACH),LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider,lv_color_hex(PEACH),LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider,7,LV_PART_KNOB);lv_obj_add_event_cb(slider,slider_event,LV_EVENT_ALL,NULL);
     lv_obj_remove_flag(slider,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    bounded(volume_popup,"上下拖动调节",18,275,106,&luna_cjk_13,SUB,false);
-    build_idle();build_setup_panel();last_touch=esp_timer_get_time();
+    build_idle();build_setup_panel();build_focus_keyboard();last_touch=esp_timer_get_time();
     bubble(root);lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESSED,NULL);
     lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESSING,NULL);lv_obj_add_event_cb(root,gesture,LV_EVENT_GESTURE,NULL);
     lv_obj_add_event_cb(root,screen_touch,LV_EVENT_RELEASED,NULL);lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESS_LOST,NULL);

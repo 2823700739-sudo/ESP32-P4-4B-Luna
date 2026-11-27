@@ -102,6 +102,9 @@ static esp_err_t status(httpd_req_t *req)
     cJSON_AddStringToObject(json,"setup_id",saved.setup_id);
     cJSON_AddBoolToObject(json,"saved",saved.saved);cJSON_AddNumberToObject(json,"state",saved.state);
     cJSON_AddNumberToObject(json,"error",saved.error);cJSON_AddNumberToObject(json,"wifi_error",ap.error);
+    cJSON_AddStringToObject(json,"trial_id",ap.trial_id);
+    cJSON_AddNumberToObject(json,"trial_state",ap.trial_state);
+    cJSON_AddNumberToObject(json,"trial_error",ap.trial_error);
     cJSON_AddBoolToObject(json,"online",wifi.online);cJSON_AddBoolToObject(json,"clock_ready",time(NULL)>=1700000000);
     cJSON_AddBoolToObject(json,"weather_fresh",wifi.online && wifi.available && !wifi.cached);
     cJSON_AddNumberToObject(json,"remaining_seconds",ap.remaining_seconds);
@@ -112,8 +115,9 @@ static esp_err_t network(httpd_req_t *req)
     if (!allowed(req,true)) return ESP_OK;
     cJSON *json=body(req);if (!json) return ESP_OK;
     /* Complete validation only: trial coordinates/name are NEVER saved or used for weather. */
-    luna_weather_config_t config={0};char id[33];random_id(id);
-    cJSON_AddStringToObject(json,"setup_id",id);cJSON_AddStringToObject(json,"location","Network trial");
+    luna_weather_config_t config={0};
+    /* Client chooses the id before sending, so a lost response can be reconciled. */
+    cJSON_AddStringToObject(json,"location","Network trial");
     cJSON_AddNumberToObject(json,"latitude",0);cJSON_AddNumberToObject(json,"longitude",0);
     bool valid=cJSON_GetArraySize(json)==6 && luna_weather_config_parse(json,&config);
     bool accepted=valid && luna_ble_wifi_try_network(&config);
