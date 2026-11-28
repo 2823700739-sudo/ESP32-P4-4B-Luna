@@ -70,15 +70,15 @@ hello 协商能力与会话/启动身份。PC 请求串行、超时 8 秒；不�
 ## 数据提供者与恢复
 
 - GSMTC 提供音乐状态/控制；ctypes COM 调用 Core Audio IAudioEndpointVolume 提供系统音量/静音，媒体查询两秒超时。
-- CPU 为 GetSystemTimes，RAM 为 GlobalMemoryStatusEx，GPU / 专用显存为 DXGI / PDH；选择专用显存最大的硬件适配器、最忙引擎。温度当前未知。
-- 指标后台每两秒采样，BLE 读取缓存并优先处理音乐。初始化有 2–30 秒退避；连续三次采集异常重建。GPU query 失效独立释放、30 秒后重建，不拖垮 CPU/RAM/工程。
+- CPU 使用独立 PDH `Processor Information(_Total)\% Processor Utility`（处理器效用，考虑性能状态），结果限制为显示范围 0–100%；替代可能明显偏低的 GetSystemTimes 忙碌时间。当前目标为 Windows 11 23H2 的任务管理器“性能 → CPU”；其他 Windows 版本的统计方式需另行对比，不承诺所有版本逐帧一致。RAM 为 GlobalMemoryStatusEx，GPU / 专用显存为 DXGI / PDH；选择专用显存最大的硬件适配器、最忙引擎。没有温度采集器，产品卡片移除温度占位，保留协议中的未知字段以兼容旧端。
+- 指标后台每两秒采样，BLE 读取缓存并优先处理音乐。初始化有 2–30 秒退避；连续三次采集异常重建。CPU 与 GPU query 分别释放和冷却重建，互不拖垮对方/RAM/工程；CPU 未预热或失败时为未知，不切回另一种口径冒充有效数据。
 - Codex App Server 只读 account/rateLimits/read，按 300 / 10080 分钟识别窗口；15 秒刷新、30 秒过期，队列有上限。不请求推理、复制 token 或修改账号。
 - 工程名称只来自前台 Code.exe 默认窗口标题，其他应用在前台时保留最近工程，不读取完整路径或文件。
 - 常驻使用当前交互用户、进程互斥、日志轮转与重启退避；任务 Running 和链路 Connected 分开。
 
 ## 天气、时间与显示
 
-天气通过 esp_http_client + TLS 根证书包访问 Open-Meteo HTTPS，NVS 保存地点与快照。`2026.11.27` 定版由 `luna_setup_portal.c` / `web/setup.html` 提供手机设置：短时无密码热点、AP侧本地HTTP、本地异步扫描/选择 Wi-Fi、试连网络、设备 HTTPS 城市查询和单一版本 NVS 配置提交。`luna_setup_request.c` 校验平面JSON、Host/Origin/会话token；热点无线切换与持久化仍由 `luna_ble_wifi.c` 单一后台worker执行。试连不保存，关闭/超时恢复上次提交配置；保存后设备独立联网，Windows不转发天气。扫描基于 [ESP-IDF 6.0.2 Wi-Fi API](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/network/esp_wifi.html)，通过受相同 AP/Host/Origin/token 保护的 POST/GET /api/scan，由原worker异步执行；12秒设备超时、5秒请求冷却、最多32原始/16去重结果；释放驱动列表，连接/保存与扫描互斥，失败保留手填，不为扫描主动断开既有STA。认证BLE向导保留为可选兼容入口，正常Start不再问天气。旧在线标签无这些入口；实际硬件验证范围须查manifest，不能从源码推断通过。
+天气通过 esp_http_client + TLS 根证书包访问 Open-Meteo HTTPS，NVS 保存地点与快照。`2026.11.28` 定版由 `luna_setup_portal.c` / `web/setup.html` 提供手机设置：短时无密码热点、AP侧本地HTTP、本地异步扫描/选择 Wi-Fi、试连网络、设备 HTTPS 城市查询和单一版本 NVS 配置提交。`luna_setup_request.c` 校验平面JSON、Host/Origin/会话token；热点无线切换与持久化仍由 `luna_ble_wifi.c` 单一后台worker执行。试连不保存，关闭/超时恢复上次提交配置；保存后设备独立联网，Windows不转发天气。扫描基于 [ESP-IDF 6.0.2 Wi-Fi API](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/network/esp_wifi.html)，通过受相同 AP/Host/Origin/token 保护的 POST/GET /api/scan，由原worker异步执行；12秒设备超时、5秒请求冷却、最多32原始/16去重结果；释放驱动列表，连接/保存与扫描互斥，失败保留手填，不为扫描主动断开既有STA。认证BLE向导保留为可选兼容入口，正常Start不再问天气。旧在线标签无这些入口；实际硬件验证范围须查manifest，不能从源码推断通过。
 
 时间策略统一写系统时钟，BLE 优先；网络就绪且未收到 BLE 时间或距上次超过 120 秒，备用 NTP 才可更新。时区固定 CST-8，NTP 周期一小时。
 

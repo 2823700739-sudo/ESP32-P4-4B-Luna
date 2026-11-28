@@ -1,0 +1,252 @@
+{
+  "version": "2026.11.28-computer",
+  "product": "Luna B1 six-card desktop companion",
+  "board": "Waveshare ESP32-P4-WIFI6-Touch-LCD-4B",
+  "chip": "esp32p4",
+  "chip_revision_min": "1.0",
+  "chip_revision_max": "1.99",
+  "idf_version": "6.0.2",
+  "lvgl_version": "9.3.0",
+  "esp_hosted_version": "2.12.11",
+  "flash_settings": {
+    "flash_mode": "dio",
+    "flash_size": "32MB",
+    "flash_freq": "80m"
+  },
+  "cpu_mhz": 360,
+  "display": "720x720 / DOUBLE_DIRECT",
+  "wifi_credentials": "empty",
+  "timezone": "Asia/Shanghai (fixed UTC+8)",
+  "app_partition_size_bytes": 10485760,
+  "files": [
+    {
+      "file": "luna-panel.bin",
+      "offset": "0x20000",
+      "size_bytes": 9875920,
+      "sha256": "940e8922e28382489a059c47615c90f260ac9fd8834fb1c89fc0190ef7a46ef1"
+    },
+    {
+      "file": "partition-table.bin",
+      "offset": "0x10000",
+      "size_bytes": 3072,
+      "sha256": "8f15ba571a89873f9c8e580df81040bd3440485adad7d7c54052999d7455a49f"
+    },
+    {
+      "file": "bootloader.bin",
+      "offset": "0x2000",
+      "size_bytes": 24016,
+      "sha256": "c1f2f3c6112ed5485e97e9fa2e142d887a4f8f4f1f6b7e958b8a4282912cab8d"
+    },
+    {
+      "file": "luna-first-install-0x0.bin",
+      "offset": "0x0",
+      "size_bytes": 10006992,
+      "sha256": "2cf71c63e2d33a4c29421d5af5e1905d8b155cc4e4b42afbfbef8a6d6c58ad09",
+      "install_mode": "first_install_only"
+    }
+  ],
+  "excluded": [
+    "Device NVS contents (not copied; RAW padding clears target NVS)",
+    "Device bonds (not copied; RAW padding clears target bonds)",
+    "TF data",
+    "C6 firmware",
+    "private Wi-Fi configuration",
+    "ELF/map/build logs"
+  ],
+  "limitations": [
+    "One earlier forced 20-byte BLE session timed out without enough phase evidence. Subsequent small-packet and normal sessions passed with the unchanged default 8-second timeout; root cause remains unknown.",
+    "New numeric pairing and recovery dialog physical touch, new network setup/power loss, Windows sleep/wake and 8-hour stability were not validated in this release.",
+    "Release approved by user overall; full-duration focus accuracy, new first installation, newly saved setup power-cycle and long-run recovery matrix not individually recorded",
+    "Focus state is RAM-only; reboot/power-off resets to idle 25 minutes",
+    "Existing compatible C6 required; no C6 image or upgrade included",
+    "P4 rev1.x / 32 MB only; other boards/revisions are not validated",
+    "Merged RAW at 0x0 clears NVS/bonds/network/city/cache; an existing matching Luna uses app-only at 0x20000",
+    "Temporary setup AP is open and HTTP; no wireless transport encryption or NVS-at-rest encryption",
+    "PC features require Windows 11, BLE and the matching Agent; GSMTC/Codex source availability varies"
+  ],
+  "source_repository": "https://github.com/2823700739-sudo/ESP32-P4-4B-Luna",
+  "source_branch": "main",
+  "source_tag": "v2026.11.28",
+  "distribution_version": "2026.11.28",
+  "project_license": "Apache-2.0 (explicit per-file and third-party licenses retained)",
+  "license_materials": [
+    "../../../LICENSE",
+    "../../../NOTICE",
+    "../../../THIRD_PARTY_NOTICES.md",
+    "../../../LICENSES/"
+  ],
+  "binary_update": "Center visible glyph bounds horizontally and vertically for roaming-cat speech bubbles and Focus custom/start/end button labels, including dynamic timer states; prior green K2/phone/music behavior retained",
+  "hardware_validation": {
+    "this_candidate_tested": false,
+    "p4_app_flash_verified": true,
+    "p4_boot_observed": true,
+    "ap_started": false,
+    "phone_connected": false,
+    "first_wifi_setup": false,
+    "wifi_scan": false,
+    "http_page_opened": false,
+    "existing_nvs_network_restore": true,
+    "ntp_synced": true,
+    "weather_https": true,
+    "reboot_restore": false,
+    "music_controls": false,
+    "volume_control": false,
+    "tonearm_motion": false,
+    "user_reported_music_update_working": true,
+    "focus_controls": false,
+    "focus_real_duration_timing": false,
+    "focus_completion_reminder": false,
+    "focus_custom_keyboard": false,
+    "focus_keyboard_modal": false,
+    "focus_standby_policy": false,
+    "text_alignment_visual_acceptance": false,
+    "user_approved_release": true,
+    "app_only_flash_hash_verified": true,
+    "cpu_sent_equals_device_ack": true,
+    "cpu_visual_comparison_user_confirmed": true,
+    "computer_b_layout_user_confirmed": true,
+    "secure_existing_bond_reconnect": true,
+    "boot_observation_seconds": 90,
+    "current_app_user_confirmation": "CPU 大致一致，B 版显示正常"
+  },
+  "source_revision_base": "a86ff09cb5892fae43f792c6ca2896bbdc84b978",
+  "source_worktree_changes": true,
+  "status": "User-approved release; exact app-only deployed firmware; hardware limits recorded separately",
+  "setup_protocol": [
+    "phone HTTP setup on temporary AP",
+    "weather_configure (optional BLE fallback)",
+    "weather_status"
+  ],
+  "setup_hotspot": {
+    "authentication": "open; no AP password",
+    "max_clients": 1,
+    "lifetime_seconds": 600,
+    "after_save_online_seconds": 20,
+    "http_address": "http://192.168.4.1"
+  },
+  "socket_gate_fix": {
+    "ipv4_and_ipv4_mapped_ap_address": true,
+    "native_ipv6_and_lan_still_rejected": true,
+    "phone_verification_pending": false,
+    "verification_scope": "Previously user-confirmed phone portal open and Wi-Fi scan; not a new provisioning/power-loss acceptance"
+  },
+  "verification_convention": "False in hardware_validation means not confirmed in the recorded observation; not evidence that the feature is unavailable.",
+  "local_validation": {
+    "full_tests": 210,
+    "hosted_tests": 133,
+    "preview_model_tests": 36,
+    "preview_browser_checks": 123,
+    "phone_browser_mock_scenarios": 20,
+    "native_lvgl_single_and_double_direct": true,
+    "rendered_ink_center_tolerance_pixels": 1,
+    "public_idf_build": true,
+    "isolated_b0_build": true,
+    "public_idf_build_scope": "Exact frozen app built and deployed before release; no rebuild during packaging",
+    "native_scope": "Exact frozen implementation before release; both single/double DIRECT passed",
+    "cpu_tests_actual_ble_environment": 17,
+    "license_hashes_verified": 57
+  },
+  "previous_music_user_confirmation": {
+    "version": "2026.11.27-music-tonearm",
+    "date": "2026-11-27",
+    "report": "测试可以",
+    "scope": "User confirmed the latest music-card update works in their test. Individual real-player, volume and tonearm steps were not separately described; this is user feedback, not an assistant instrumented measurement.",
+    "confirmed_scope": [
+      "music-card update overall"
+    ],
+    "not_confirmed_by_this_report": [
+      "phone setup and new configuration power-cycle recovery",
+      "full long-run and recovery matrix"
+    ]
+  },
+  "focus_timer": {
+    "presets_minutes": [
+      25,
+      45,
+      60
+    ],
+    "session_storage": "RAM only; reboot resets to idle 25 minutes",
+    "time_source": "device monotonic microseconds; independent of wall-clock/NTP",
+    "continues_across_cards": true,
+    "running_prevents_clock_standby": true,
+    "paused_allows_clock_standby": true,
+    "requires_pc_or_network": false,
+    "custom_minutes": {
+      "minimum": 1,
+      "maximum": 999,
+      "integer_only": true,
+      "confirm_starts_timer": false
+    },
+    "keyboard": {
+      "component": "LVGL 9.3 Keyboard",
+      "license": "MIT",
+      "style": "K2 rounded mint green",
+      "blocks_background_clicks_gestures_navigation_and_standby": true
+    },
+    "completion": "pending navigation dot and cat bubble, no forced wake/navigation",
+    "acknowledgement": "visit Focus, choose a preset, end or restart",
+    "auto_break_timer": false,
+    "guide": "../../../docs/FOCUS.md"
+  },
+  "text_alignment": {
+    "targets": [
+      "greeting/rest speech bubble",
+      "custom/default/custom-999 label",
+      "start/pause/resume/restart/end including disabled end"
+    ],
+    "algorithm": "visible glyph bounds using actual font metrics; centered on both axes",
+    "assets_changed": true,
+    "asset_scope": "Existing small CJK fonts extended for Chinese BLE UI; ink centering unchanged"
+  },
+  "merged_image": {
+    "format": "raw",
+    "tool": "esptool 5.4.0",
+    "target_offset": "0x0",
+    "gap_fill": "0xFF",
+    "inputs": [
+      {
+        "file": "bootloader.bin",
+        "offset": "0x2000"
+      },
+      {
+        "file": "partition-table.bin",
+        "offset": "0x10000"
+      },
+      {
+        "file": "luna-panel.bin",
+        "offset": "0x20000"
+      }
+    ],
+    "write_end_exclusive": "0x98b1d0",
+    "erase_end_exclusive": "0x98c000",
+    "overwrites": [
+      "bootloader",
+      "partition table",
+      "NVS including BLE bonds/weather cache",
+      "phy_init",
+      "factory app"
+    ],
+    "storage_offset": "0xA20000",
+    "full_flash_padding": false,
+    "warning": "First installation only. RAW padding overwrites NVS; use app-only for existing devices."
+  },
+  "release_date": "2026-11-28",
+  "release_source": "Git tag v2026.11.28",
+  "release_notes": "Computer B UI and PDH Processor Utility CPU metric; Chinese secure BLE pairing/recovery modal; bounded Agent notification cleanup; worker-based Wi-Fi reconnect and IP recovery",
+  "user_release_confirmation": {
+    "date": "2026-11-28",
+    "report": "ok现在定版了，整理一下同步github，并合并到主分支。然后发布包也更新",
+    "scope": "Release approval after user confirmed CPU approximately matches Task Manager Performance CPU and Computer B layout is normal"
+  },
+  "cpu_collection": {
+    "counter": "\\Processor Information(_Total)\\% Processor Utility",
+    "sampling_seconds": 2,
+    "recovery_seconds": 30,
+    "warmup_or_failure": "unknown; no alternate metric fallback",
+    "target_comparison": "Windows 11 23H2 build 22631 Task Manager Performance CPU; user confirmed approximately equal",
+    "other_windows_versions": "Task Manager metric can differ; re-check on target version",
+    "independent_pdh_comparison_max_percentage_point_difference": 0.1,
+    "secure_ble_cpu_sent_and_acknowledged": 29.4,
+    "temperature": "No sensor source; temperature UI removed, nullable protocol fields retained"
+  }
+}

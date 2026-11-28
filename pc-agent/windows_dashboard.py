@@ -1,6 +1,6 @@
 """Read-only Windows metrics. No driver, elevation, network or serial port.
 
-CPU = GetSystemTimes busy-time delta; RAM = physical used memory.
+CPU = total Processor Utility (performance-state aware); RAM = physical used memory.
 GPU = busiest WDDM engine on the largest dedicated-memory DXGI adapter.
 VRAM = adapter-wide dedicated usage, NOT summed GPU Process Memory counters.
 Unsupported temperatures remain None; never substitute ACPI system temperature.
@@ -106,6 +106,56 @@ class CounterItem(C.Structure):
     _fields_ = [("name", W.LPWSTR), ("value", CounterValue)]
 
 
+class CpuCounter:
+    """Independent total CPU utility query, never a scaled busy-time estimate."""
+    def __init__(self):
+        self.dll = C.WinDLL("pdh")
+        self.query = C.c_void_p()
+        self.counter = C.c_void_p()
+        self.samples = 0
+        self.dll.PdhOpenQueryW.argtypes = [W.LPCWSTR, C.c_size_t, C.POINTER(C.c_void_p)]
+        self.dll.PdhAddEnglishCounterW.argtypes = [C.c_void_p, W.LPCWSTR, C.c_size_t, C.POINTER(C.c_void_p)]
+        self.dll.PdhCollectQueryData.argtypes = [C.c_void_p]
+        self.dll.PdhGetFormattedCounterValue.argtypes = [C.c_void_p, W.DWORD, C.POINTER(W.DWORD), C.POINTER(CounterValue)]
+        self.dll.PdhCloseQuery.argtypes = [C.c_void_p]
+        for name in ("PdhOpenQueryW", "PdhAddEnglishCounterW", "PdhCollectQueryData",
+                     "PdhGetFormattedCounterValue", "PdhCloseQuery"):
+            getattr(self.dll, name).restype = W.DWORD
+        if self.dll.PdhOpenQueryW(None, 0, C.byref(self.query)):
+            self.close()
+            raise OSError("CPU query unavailable")
+        try:
+            if self.dll.PdhAddEnglishCounterW(self.query,
+                    r"\Processor Information(_Total)\% Processor Utility", 0, C.byref(self.counter)):
+                raise OSError("CPU utility counter unavailable")
+            if self.dll.PdhCollectQueryData(self.query):
+                raise OSError("CPU utility warmup unavailable")
+        except Exception:
+            self.close()
+            raise
+
+    def collect(self):
+        if self.dll.PdhCollectQueryData(self.query):
+            raise OSError("CPU utility collection unavailable")
+        self.samples += 1
+        value = CounterValue()
+        # Read the actual utility before limiting the product's 0..100 display.
+        rc = self.dll.PdhGetFormattedCounterValue(self.counter, 0x200 | 0x8000,
+                                                 None, C.byref(value))
+        if rc or value.status not in (0, 1):
+            # The first two samples may share an instant during startup.
+            if self.samples == 1 and (rc == 0xC0000BC6 or (rc == 0 and value.status == 0xC0000BBA)):
+                return None
+            raise OSError("CPU utility data unavailable")
+        raw = value.number
+        return round(min(100, raw), 1) if math.isfinite(raw) and raw >= 0 else None
+
+    def close(self):
+        if self.query:
+            self.dll.PdhCloseQuery(self.query)
+            self.query = None
+
+
 class GpuCounters:
     def __init__(self):
         self.dll = C.WinDLL("pdh")
@@ -175,7 +225,6 @@ class WindowsDashboard:
         if sys.platform != "win32":
             raise RuntimeError("Windows metrics only")
         self.kernel = C.WinDLL("kernel32", use_last_error=True)
-        self.kernel.GetSystemTimes.argtypes = [C.POINTER(C.c_ulonglong)] * 3
         self.kernel.GlobalMemoryStatusEx.argtypes = [C.POINTER(Memory)]
         self.kernel.OpenProcess.argtypes = [W.DWORD, W.BOOL, W.DWORD]
         self.kernel.OpenProcess.restype = C.c_void_p
@@ -185,12 +234,41 @@ class WindowsDashboard:
         self.user.GetForegroundWindow.restype = W.HWND
         self.user.GetWindowThreadProcessId.argtypes = [W.HWND, C.POINTER(W.DWORD)]
         self.user.GetWindowTextW.argtypes = [W.HWND, W.LPWSTR, C.c_int]
-        self.previous = None
         self.project = ""
+        self.cpu_counter = None
+        self._cpu_retry_at = 0
         self.gpu = None
         self.counters = None
         self._gpu_retry_at = 0
+        self._ensure_cpu()
         self._ensure_gpu()
+
+    def _ensure_cpu(self):
+        now = time.monotonic()
+        if now < self._cpu_retry_at:
+            return
+        self._cpu_retry_at = now + 30
+        try:
+            self.cpu_counter = CpuCounter()
+        except OSError:
+            LOG.debug("CPU utility temporarily unavailable")
+
+    def _cpu_value(self):
+        if self.cpu_counter is None:
+            self._ensure_cpu()
+        if self.cpu_counter is None:
+            return None
+        try:
+            return self.cpu_counter.collect()
+        except OSError:
+            LOG.warning("CPU utility unavailable; retry in 30s")
+            counter, self.cpu_counter = self.cpu_counter, None
+            self._cpu_retry_at = time.monotonic() + 30
+            try:
+                counter.close()
+            except OSError:
+                LOG.debug("Failed CPU query already unavailable")
+            return None
 
     def _ensure_gpu(self):
         now = time.monotonic()
@@ -245,15 +323,7 @@ class WindowsDashboard:
         return self.project
 
     def sample(self):
-        idle, kernel, user = C.c_ulonglong(), C.c_ulonglong(), C.c_ulonglong()
-        cpu = None
-        if self.kernel.GetSystemTimes(C.byref(idle), C.byref(kernel), C.byref(user)):
-            times = (idle.value, kernel.value + user.value)
-            if self.previous:
-                di, dt = times[0]-self.previous[0], times[1]-self.previous[1]
-                if dt > 0:
-                    cpu = finite(100 * (1-di/dt))
-            self.previous = times
+        cpu = self._cpu_value()
         memory = Memory(); memory.length = C.sizeof(memory)
         ram_used = ram_total = None
         if self.kernel.GlobalMemoryStatusEx(C.byref(memory)):
@@ -282,6 +352,11 @@ class WindowsDashboard:
             "name": name, "project": self.read_project()}
 
     def close(self):
-        if self.counters:
-            counters, self.counters = self.counters, None
-            counters.close()
+        cpu, self.cpu_counter = self.cpu_counter, None
+        gpu, self.counters = self.counters, None
+        try:
+            if cpu:
+                cpu.close()
+        finally:
+            if gpu:
+                gpu.close()

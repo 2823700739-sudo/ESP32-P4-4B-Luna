@@ -33,6 +33,7 @@ typedef int esp_err_t;
 #define WIFI_SCAN_TYPE_ACTIVE 0
 #define WIFI_EVENT_STA_DISCONNECTED 11
 #define IP_EVENT_STA_GOT_IP 12
+#define IP_EVENT_STA_LOST_IP 14
 #define WIFI_STORAGE_RAM 0
 #define WIFI_MODE_STA 0
 #define WIFI_IF_STA 0
@@ -83,6 +84,7 @@ size_t strlcpy(char*,const char*,size_t);
 '''
 RUNTIME=r'''
 #include "stub.h"
+#include <assert.h>
 #include <setjmp.h>
 #include "luna_ble_wifi.c"
 static jmp_buf end_worker;
@@ -96,6 +98,10 @@ static int ap_auth,ap_has_password;
 static int scan_fault,scan_calls,scan_cleared,scan_stopped,connect_calls;
 static wifi_ap_record_t associated;
 static int associated_error;
+static int connect_error,in_callback;
+static int association_without_ip,disconnect_calls,inject_old_trial;
+static bool timer_active;
+static uint64_t timer_delay;
 int esp_wifi_sta_get_ap_info(wifi_ap_record_t*out){*out=associated;return associated_error;}
 int esp_wifi_scan_start(const wifi_scan_config_t*c,bool block){if(block||c->show_hidden)return -2;scan_calls++;return scan_fault;}
 int esp_wifi_scan_stop(void){scan_stopped++;return 0;}int esp_wifi_clear_ap_list(void){scan_cleared++;return 0;}
@@ -109,8 +115,8 @@ int esp_wifi_scan_get_ap_records(uint16_t*n,wifi_ap_record_t*out){
     memcpy(out,records,sizeof(records));*n=count;return 0;
 }
 static void(*worker_entry)(void*);
-int esp_wifi_connect(void){connect_calls++;return 0;}int esp_wifi_stop(void){return 0;}int esp_wifi_start(void){return 0;}
-int esp_wifi_disconnect(void){return 0;}void esp_fill_random(void*p,size_t n){memset(p,17,n);}
+int esp_wifi_connect(void){assert(!in_callback);connect_calls++;return association_without_ip?-2:connect_error;}int esp_wifi_stop(void){return 0;}int esp_wifi_start(void){return 0;}
+int esp_wifi_disconnect(void){assert(!in_callback);association_without_ip=0;disconnect_calls++;return 0;}void esp_fill_random(void*p,size_t n){memset(p,17,n);}
 int64_t esp_timer_get_time(void){return test_now;}
 int luna_setup_portal_start(void){portal_running=1;return 0;}void luna_setup_portal_stop(void){portal_running=0;}
 void luna_time_set_network_ready(bool value){(void)value;}
@@ -121,12 +127,13 @@ int esp_netif_init(void){return 0;}int esp_event_loop_create_default(void){retur
 void*esp_netif_get_handle_from_ifkey(const char*s){(void)s;return (void*)1;}void*esp_netif_create_default_wifi_sta(void){return(void*)1;}
 void*esp_netif_create_default_wifi_ap(void){return(void*)1;}
 int esp_event_handler_register(int a,int b,void(*c)(void*,int,int32_t,void*),void*d){(void)a;(void)b;(void)c;(void)d;return 0;}
-int esp_timer_start_once(void*a,uint64_t b){(void)a;(void)b;return 0;}int esp_timer_stop(void*a){(void)a;return 0;}
-bool esp_timer_is_active(void*a){(void)a;return false;}int esp_timer_create(const esp_timer_create_args_t*a,void**b){(void)a;*b=(void*)1;return 0;}
+int esp_timer_start_once(void*a,uint64_t b){(void)a;if(timer_active)return ESP_ERR_INVALID_STATE;timer_active=true;timer_delay=b;return 0;}
+int esp_timer_stop(void*a){(void)a;timer_active=false;return 0;}
+bool esp_timer_is_active(void*a){(void)a;return timer_active;}int esp_timer_create(const esp_timer_create_args_t*a,void**b){(void)a;*b=(void*)1;timer_active=false;return 0;}
 void*xSemaphoreCreateMutex(void){return(void*)1;}int xSemaphoreTake(void*a,unsigned b){(void)a;(void)b;return 1;}
 int xSemaphoreGive(void*a){(void)a;return 1;}void*xQueueCreate(unsigned a,unsigned b){(void)a;(void)b;return(void*)1;}
 int xQueueSend(void*a,const void*b,unsigned c){(void)a;(void)c;if(has_queue)return 0;memcpy(&queued,b,sizeof(queued));has_queue=true;return 1;}
-int xQueueReceive(void*a,void*b,unsigned c){(void)a;(void)c;if(!has_queue)longjmp(end_worker,1);memcpy(b,&queued,sizeof(queued));memset(&queued,0,sizeof(queued));has_queue=false;return 1;}
+int xQueueReceive(void*a,void*b,unsigned c){(void)a;(void)c;if(!has_queue)longjmp(end_worker,1);if(inject_old_trial&&queued.trial){atomic_store(&retries,4);atomic_store(&reconnect_requested,true);timer_active=true;timer_delay=1000000;inject_old_trial=0;}memcpy(b,&queued,sizeof(queued));memset(&queued,0,sizeof(queued));has_queue=false;return 1;}
 int xTaskCreate(void(*a)(void*),const char*b,unsigned c,void*d,unsigned e,void*f){(void)b;(void)c;(void)d;(void)e;(void)f;worker_entry=a;return 1;}
 int nvs_open(const char*a,int b,nvs_handle_t*c){(void)a;if(!b&&!has_store)return 1;*c=1;return 0;}
 int nvs_get_blob(nvs_handle_t a,const char*b,void*c,size_t*d){(void)a;(void)b;if(!has_store)return 1;memcpy(c,&stored,sizeof(stored));*d=sizeof(stored);return 0;}
@@ -143,6 +150,8 @@ void test_reset(int preserve){if(!preserve){has_store=false;memset(&stored,0,siz
   test_now=0;portal_running=0;trial_active=ap_committed=false;ap_deadline=ap_close_after=0;memset(&ap,0,sizeof(ap));atomic_store(&ap_request,0);atomic_store(&station_enabled,false);
   memset(&scan,0,sizeof(scan));atomic_store(&scan_busy,false);atomic_store(&scan_done,0);scan_started=false;scan_next=scan_deadline=0;
   scan_fault=scan_calls=scan_cleared=scan_stopped=connect_calls=0;
+  connect_error=in_callback=0;timer_active=false;timer_delay=0;atomic_store(&reconnect_requested,false);atomic_store(&retries,0);
+  association_without_ip=disconnect_calls=inject_old_trial=0;atomic_store(&reconnect_reassociate,false);
   memset(&associated,0,sizeof(associated));associated_error=0;trial_deadline=0;memset(trial_ssid,0,sizeof(trial_ssid));
   memset(&setup_status,0,sizeof(setup_status));atomic_store(&online,false);atomic_store(&configured,false);atomic_store(&available,false);atomic_store(&cached,false);atomic_store(&reconfiguring,false);
   luna_ble_wifi_start();test_pump();}
@@ -162,6 +171,15 @@ void test_scan_fault(int error){scan_fault=error;}int test_scan_state(void){retu
 int test_scan_count(void){return scan.count;}int test_scan_calls(void){return scan_calls;}
 int test_scan_cleared(void){return scan_cleared;}int test_scan_stopped(void){return scan_stopped;}
 int test_connect_calls(void){return connect_calls;}
+void test_connect_error(int error){connect_error=error;}
+int test_online(void){return atomic_load(&online);}int test_timer_active(void){return timer_active;}
+int test_timer_delay(void){return (int)timer_delay;}
+void test_associated_without_ip(void){association_without_ip=1;}
+int test_disconnect_calls(void){return disconnect_calls;}void test_inject_old_trial(void){inject_old_trial=1;}
+int test_retries(void){return atomic_load(&retries);}
+void test_reconnect_tick(void){service_reconnect();}
+void test_fire_recovery(void){timer_active=false;in_callback=1;recover(NULL);in_callback=0;}
+void test_event(int event){in_callback=1;network_event(NULL,event==IP_EVENT_STA_GOT_IP||event==IP_EVENT_STA_LOST_IP?IP_EVENT:WIFI_EVENT,event,NULL);in_callback=0;}
 void test_trial_tick(int seconds,const char*ssid,int ip,int error){
   test_now+=(int64_t)seconds*1000000;memset(&associated,0,sizeof(associated));
   if(ssid)strlcpy((char*)associated.ssid,ssid,sizeof(associated.ssid));
@@ -307,3 +325,49 @@ class StorageTests(unittest.TestCase):
         self.assertTrue(self.lib.luna_setup_scan_request());self.lib.test_scan_tick(0,0)
         self.lib.test_scan_fault(-1);self.lib.test_scan_tick(1,1)
         self.assertEqual(self.lib.test_scan_state(),3);self.assertEqual(self.lib.test_scan_cleared(),1)
+    def test_connect_rpc_failure_retries_only_on_worker_and_retains_watchdog(self):
+        self.save();self.lib.test_connect_error(-1)
+        before=self.lib.test_connect_calls();self.lib.test_event(10)
+        self.assertEqual(self.lib.test_connect_calls(),before)
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+1)
+        self.assertTrue(self.lib.test_timer_active());self.assertEqual(self.lib.test_timer_delay(),30000000)
+        self.lib.test_fire_recovery();self.assertEqual(self.lib.test_connect_calls(),before+1)
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+2)
+        self.assertTrue(self.lib.test_timer_active())
+        self.lib.test_event(12);self.assertTrue(self.lib.test_online());self.assertFalse(self.lib.test_timer_active())
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+2)
+    def test_disconnect_and_lost_ip_clear_online_without_blocking_event_loop(self):
+        self.save();self.lib.test_event(12);self.assertTrue(self.lib.test_online())
+        before=self.lib.test_connect_calls();self.lib.test_event(14)
+        self.assertFalse(self.lib.test_online());self.assertEqual(self.lib.test_connect_calls(),before)
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+1)
+        self.lib.test_event(11);self.assertEqual(self.lib.test_connect_calls(),before+1)
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+2)
+    def test_cancel_trial_ignores_late_ip_and_pending_recovery(self):
+        c=self.config();self.assertTrue(self.lib.luna_ble_wifi_try_network(C.byref(c)));self.lib.test_pump()
+        self.lib.luna_setup_ap_request(False);self.lib.test_ap_tick(1)
+        self.assertFalse(self.lib.test_network_enabled());self.lib.test_event(12)
+        self.assertFalse(self.lib.test_online())
+        before=self.lib.test_connect_calls();self.lib.test_fire_recovery();self.lib.test_reconnect_tick()
+        self.assertEqual(self.lib.test_connect_calls(),before)
+    def test_reconnect_defers_during_scan_and_resumes_once(self):
+        self.save();self.lib.test_event(12);self.assertTrue(self.lib.luna_setup_scan_request())
+        self.lib.test_event(14);before=self.lib.test_connect_calls();self.lib.test_fire_recovery()
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before)
+        self.lib.test_scan_tick(0,0);self.lib.test_scan_tick(1,1)
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+1)
+    def test_lost_ip_and_watchdog_reassociate_instead_of_busy_connect_loop(self):
+        self.save();self.lib.test_event(12);self.lib.test_associated_without_ip()
+        before=self.lib.test_disconnect_calls();self.lib.test_event(14);self.lib.test_reconnect_tick()
+        self.assertEqual(self.lib.test_disconnect_calls(),before+1);self.assertTrue(self.lib.test_timer_active())
+        self.lib.test_associated_without_ip();self.lib.test_fire_recovery();self.lib.test_reconnect_tick()
+        self.assertEqual(self.lib.test_disconnect_calls(),before+2)
+        self.lib.test_event(12);self.assertTrue(self.lib.test_online());self.assertFalse(self.lib.test_timer_active())
+    def test_new_trial_clears_previous_network_backoff_and_watchdog(self):
+        c=self.config();self.lib.test_inject_old_trial()
+        self.assertTrue(self.lib.luna_ble_wifi_try_network(C.byref(c)));self.lib.test_pump()
+        self.assertEqual(self.lib.test_retries(),0)
+        self.assertEqual(self.lib.test_timer_delay(),30000000)
+        before=self.lib.test_connect_calls();self.lib.test_event(11);self.lib.test_reconnect_tick()
+        self.assertEqual(self.lib.test_retries(),1);self.assertEqual(self.lib.test_connect_calls(),before+1)
+        self.lib.test_reconnect_tick();self.assertEqual(self.lib.test_connect_calls(),before+1)

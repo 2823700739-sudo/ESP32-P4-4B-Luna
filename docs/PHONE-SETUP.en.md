@@ -1,6 +1,6 @@
 # Set up Luna from a phone
 
-The **2026.11.27 release** includes this phone setup flow. Older firmware without a phone portal must be upgraded first; see [deployment](DEPLOYMENT.en.md). Clock/weather/Focus do not need a Windows Agent.
+The **2026.11.28 release** includes this phone setup flow. Older firmware without a phone portal must be upgraded first; see [deployment](DEPLOYMENT.en.md). Clock/weather/Focus do not need a Windows Agent.
 
 ## Clock and weather: no PC script needed
 

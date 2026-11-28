@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: CC0-1.0
-// Isolated diagnostic application. Not the five-card production firmware.
+// Secured BLE transport shared by the six-card product and isolated diagnostic.
 #include <inttypes.h>
 #include <math.h>
 #include <stdatomic.h>
@@ -37,6 +37,12 @@
 #include "luna_power.h"
 #endif
 #include "luna_ble_wifi.h"
+#ifdef CONFIG_LUNA_BLE_B1_MUSIC
+static atomic_int link_phase=LUNA_LINK_STARTING;
+#define set_link_phase(value) atomic_store(&link_phase,value)
+#else
+#define set_link_phase(value) ((void)0)
+#endif
 
 #ifndef CONFIG_LUNA_BLE_B0
 #error "B0 application requires the isolated BLE sdkconfig profile"
@@ -60,6 +66,7 @@ static atomic_int pair_answer = -1;
 static atomic_uint answer_generation;
 static uint16_t pair_conn = BLE_HS_CONN_HANDLE_NONE;
 static atomic_uint pair_started;
+static atomic_uint pair_sequence;
 static atomic_int diagnostic_enc = -1, diagnostic_confirm = -1, diagnostic_disconnect = -1;
 static atomic_uint diagnostic_security;
 static atomic_uint session_payload = 20;
@@ -72,11 +79,16 @@ static struct ble_npl_callout adv_retry;
 static struct ble_npl_event recovery_event;
 static ble_addr_t recovery_peer;
 static atomic_bool recovery_pending;
+static atomic_bool recovery_action_pending,recovery_accept;
+static atomic_int recovery_result;
 static atomic_uint recovery_generation, recovery_answer_generation, recovery_started;
+#ifndef CONFIG_LUNA_BLE_B1_MUSIC
 static lv_obj_t *recovery_button;
 static lv_obj_t *status_label, *pair_label, *accept_button, *reject_button, *clock_label, *diagnostic_label;
-static QueueHandle_t status_queue, tx_queue;
 static lv_obj_t *diagnostic_page;
+static unsigned displayed_generation;
+#endif
+static QueueHandle_t status_queue, tx_queue;
 
 typedef struct { char text[140]; } ui_status_t;
 typedef struct { uint16_t conn, id, len; uint32_t generation; char data[512]; } tx_item_t;
@@ -87,6 +99,27 @@ static void status(const char *text)
     snprintf(item.text, sizeof(item.text), "%s", text);
     xQueueOverwrite(status_queue, &item);
     ESP_LOGI(TAG, "%s", text);
+}
+
+typedef struct {bool pending;unsigned code,generation,started;} pairing_view_t;
+static bool read_pairing_view(pairing_view_t *out)
+{
+    unsigned before=atomic_load(&pair_sequence);
+    if(before&1)return false;
+    pairing_view_t next={.pending=atomic_load(&pairing),.code=atomic_load(&pair_code),
+        .generation=atomic_load(&pair_generation),.started=atomic_load(&pair_started)};
+    if(before!=atomic_load(&pair_sequence))return false;
+    *out=next;return true;
+}
+/* All writers run on the single NimBLE host. The UI takes a coherent snapshot
+   or keeps its previous frame; it must never combine an old code with a new ID. */
+static void publish_pairing(uint16_t conn,unsigned code)
+{
+    atomic_fetch_add(&pair_sequence,1);
+    pair_conn=conn;atomic_store(&pair_started,(uint32_t)(esp_timer_get_time()/1000));
+    atomic_store(&pair_answer,-1);atomic_fetch_add(&pair_generation,1);
+    atomic_store(&pair_code,code);atomic_store(&pairing,true);
+    atomic_fetch_add(&pair_sequence,1);
 }
 
 static bool secure(uint16_t conn)
@@ -177,7 +210,10 @@ static int handle_message(uint16_t conn, uint16_t id, const uint8_t *data, size_
                  "\"att_payload\":%u,\"mode\":\"%s\",\"features\":[%s]}",
                  boot_id, sid->valuestring, payload_limit, mode, features);
         result = queue_reply(conn, id, reply);
-        if (!result) snprintf(session, sizeof(session), "%s", sid->valuestring);
+        if (!result) {
+            snprintf(session, sizeof(session), "%s", sid->valuestring);
+            set_link_phase(LUNA_LINK_ACTIVE);
+        }
     } else if (session[0] && strcmp(session, sid->valuestring) == 0) {
         if (strcmp(type->valuestring, "ping") == 0) {
             snprintf(reply, sizeof(reply), "{\"v\":1,\"type\":\"pong\",\"session\":\"%s\","
@@ -331,6 +367,7 @@ static void advertise(void)
     int rc = ble_gap_adv_set_fields(&fields);
     if (!rc) rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &params, gap_event, NULL);
     if(rc){
+        set_link_phase(LUNA_LINK_ERROR);
         ESP_LOGW(TAG,"BLE_ADV_START rc=%d; deferred retry; internal_free=%u largest=%u",rc,
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),
                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
@@ -339,6 +376,7 @@ static void advertise(void)
         ble_npl_callout_reset(&adv_retry,ble_npl_time_ms_to_ticks32(1000));
         status("BLE advertising retry pending; bonds unchanged");
     }else{
+        set_link_phase(LUNA_LINK_WAITING);
         ble_npl_callout_stop(&adv_retry);
         ESP_LOGI(TAG,"BLE_ADV_START rc=0");
         status("Luna: waiting for Windows BLE connection");
@@ -350,8 +388,10 @@ static void retry_advertise(struct ble_npl_event *event)
 static void apply_bond_recovery(struct ble_npl_event *event)
 {
     (void)event;
+    atomic_store(&recovery_action_pending,false);
     if (!atomic_load(&recovery_pending) || atomic_load(&recovery_answer_generation) != atomic_load(&recovery_generation) ||
         (uint32_t)(esp_timer_get_time()/1000 - atomic_load(&recovery_started)) >= 60000) return;
+    if(!atomic_load(&recovery_accept)){atomic_store(&recovery_pending,false);atomic_store(&recovery_result,0);return;}
     // Physical confirmation applies only to the peer that requested re-pairing.
     // Never clear all bonds or erase NVS, and never target a different connection.
     uint16_t active = atomic_load(&conn_handle);
@@ -359,13 +399,15 @@ static void apply_bond_recovery(struct ble_npl_event *event)
     if (active != BLE_HS_CONN_HANDLE_NONE &&
         (ble_gap_conn_find(active, &desc) || ble_addr_cmp(&desc.peer_id_addr, &recovery_peer))) {
         status("Old bond reset blocked: a different peer is connected");
+        atomic_store(&recovery_result,-1);
         return;
     }
     bool advertising = ble_gap_adv_active();
-    if (advertising && ble_gap_adv_stop()) { status("Old bond reset blocked: cannot stop advertising"); return; }
+    if (advertising && ble_gap_adv_stop()) { atomic_store(&recovery_result,-1);status("Old bond reset blocked: cannot stop advertising"); return; }
     int rc = ble_gap_unpair(&recovery_peer);
     ESP_LOGI(TAG, "BOND_RECOVERY physical_confirmation=1 target=repeat_pairing_peer rc=%d", rc);
     if (!rc) atomic_store(&recovery_pending, false);
+    atomic_store(&recovery_result,rc?-1:1);
     if (active == BLE_HS_CONN_HANDLE_NONE) advertise();
     status(rc ? "Old bond reset failed; other bonds unchanged" : "Old PC bond removed: add Luna in Windows again");
 }
@@ -381,8 +423,22 @@ static void apply_pair_answer(struct ble_npl_event *event)
     atomic_store(&diagnostic_confirm, rc);
     ESP_LOGI(TAG, "PAIR_CONFIRM accepted=%d rc=%d elapsed_ms=%" PRIu32,
              answer, rc, (uint32_t)(esp_timer_get_time()/1000) - atomic_load(&pair_started));
-    atomic_store(&pairing, false);
+    atomic_fetch_add(&pair_sequence,1);atomic_store(&pairing,false);atomic_fetch_add(&pair_sequence,1);
+    if(rc)set_link_phase(LUNA_LINK_ERROR);
     status(rc ? "Pairing answer failed" : answer ? "Pairing confirmed on Luna" : "Pairing rejected on Luna");
+}
+
+static void clear_connection(void)
+{
+#ifdef CONFIG_LUNA_BLE_B1_MUSIC
+    luna_music_reset_session();
+    luna_dashboard_disconnect();
+#endif
+    atomic_fetch_add(&generation,1);atomic_store(&conn_handle,BLE_HS_CONN_HANDLE_NONE);
+    atomic_store(&subscribed,false);
+    atomic_fetch_add(&pair_sequence,1);atomic_store(&pairing,false);atomic_fetch_add(&pair_sequence,1);
+    pair_conn=BLE_HS_CONN_HANDLE_NONE;session[0]=0;last_request_id=0;
+    atomic_store(&session_payload,20);luna_ble_frame_reset(&receiver);
 }
 
 static int gap_event(struct ble_gap_event *event, void *arg)
@@ -400,6 +456,9 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         atomic_store(&diagnostic_disconnect, -1); atomic_store(&diagnostic_security, 0);
         atomic_fetch_add(&generation, 1);
         atomic_store(&conn_handle, event->connect.conn_handle);
+        atomic_store(&recovery_result,0);
+        atomic_store(&subscribed,false);
+        set_link_phase(LUNA_LINK_SECURING);
         ble_npl_callout_stop(&adv_retry);
         atomic_store(&session_payload, 20);
         status("Connected: securing link; confirm BOTH screens if asked");
@@ -409,24 +468,16 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         int rc = ble_gap_security_initiate(event->connect.conn_handle);
         ESP_LOGI(TAG, "BLE_SECURITY_START rc=%d", rc);
         if (rc && rc != BLE_HS_EALREADY) {
+            set_link_phase(LUNA_LINK_ERROR);
             status("Security startup failed; application data remains blocked");
             ble_gap_terminate(event->connect.conn_handle, BLE_ERR_AUTH_FAIL);
         }
         break;
     }
     case BLE_GAP_EVENT_DISCONNECT:
-#ifdef CONFIG_LUNA_BLE_B1_MUSIC
-        luna_music_reset_session();
-        luna_dashboard_disconnect();
-#endif
+        clear_connection();
         atomic_store(&diagnostic_disconnect, event->disconnect.reason);
         ESP_LOGW(TAG, "BLE_DISCONNECT reason=%d (0x%x)", event->disconnect.reason, event->disconnect.reason);
-        atomic_fetch_add(&generation, 1);
-        atomic_store(&conn_handle, BLE_HS_CONN_HANDLE_NONE);
-        atomic_store(&subscribed, false); atomic_store(&pairing, false);
-        pair_conn = BLE_HS_CONN_HANDLE_NONE; session[0] = 0; last_request_id = 0;
-        atomic_store(&session_payload, 20);
-        luna_ble_frame_reset(&receiver);
         advertise();
         break;
     case BLE_GAP_EVENT_SUBSCRIBE:
@@ -440,12 +491,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             status("Unsupported pairing method: numerical comparison required");
             break;
         }
-        pair_conn = event->passkey.conn_handle;
-        atomic_store(&pair_started, (uint32_t)(esp_timer_get_time()/1000));
-        atomic_store(&pair_answer, -1);
-        atomic_store(&pair_generation, atomic_load(&generation));
-        atomic_store(&pair_code, event->passkey.params.numcmp);
-        atomic_store(&pairing, true);
+        publish_pairing(event->passkey.conn_handle,event->passkey.params.numcmp);
         break;
     case BLE_GAP_EVENT_ENC_CHANGE: {
         struct ble_gap_conn_desc desc = {0};
@@ -454,7 +500,10 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         unsigned flags = find_rc ? 0 : (desc.sec_state.encrypted | (desc.sec_state.authenticated << 1) |
                          (desc.sec_state.bonded << 2) | (desc.sec_state.key_size << 8));
         atomic_store(&diagnostic_security, flags);
-        if (!event->enc_change.status && secure(event->enc_change.conn_handle)) atomic_store(&recovery_pending, false);
+        bool ready=!event->enc_change.status && secure(event->enc_change.conn_handle);
+        atomic_fetch_add(&pair_sequence,1);atomic_store(&pairing,false);atomic_fetch_add(&pair_sequence,1);
+        set_link_phase(ready?(session[0]?LUNA_LINK_ACTIVE:LUNA_LINK_READY):LUNA_LINK_ERROR);
+        if (ready) atomic_store(&recovery_pending, false);
         ESP_LOGI(TAG, "BLE_ENC status=%d (0x%x) find=%d encrypted=%u authenticated=%u bonded=%u key_size=%u",
                  event->enc_change.status, event->enc_change.status, find_rc,
                  (unsigned)desc.sec_state.encrypted, (unsigned)desc.sec_state.authenticated,
@@ -472,6 +521,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             atomic_fetch_add(&recovery_generation, 1);
             atomic_store(&recovery_started, (uint32_t)(esp_timer_get_time()/1000));
             atomic_store(&recovery_pending, true);
+            atomic_store(&recovery_action_pending,false);atomic_store(&recovery_result,0);
             status("Old bond exists: use panel reset ONLY if PC forgot Luna");
         }
         ESP_LOGW(TAG, "BLE_REPEAT_PAIRING ignored; physical reset required; existing bond preserved");
@@ -487,6 +537,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 static void on_sync(void)
 {
     if (ble_hs_util_ensure_addr(0) || ble_hs_id_infer_auto(0, &own_addr_type)) {
+        set_link_phase(LUNA_LINK_ERROR);
         status("BLE address initialization failed"); return;
     }
     advertise();
@@ -494,16 +545,9 @@ static void on_sync(void)
 static void on_reset(int reason)
 {
     ble_npl_callout_stop(&adv_retry);
-#ifdef CONFIG_LUNA_BLE_B1_MUSIC
-    luna_music_reset_session();
-    luna_dashboard_disconnect();
-#endif
-    atomic_fetch_add(&generation, 1); atomic_store(&conn_handle, BLE_HS_CONN_HANDLE_NONE);
-    atomic_store(&subscribed, false); atomic_store(&pairing, false);
-    pair_conn = BLE_HS_CONN_HANDLE_NONE; session[0] = 0; last_request_id = 0;
-    atomic_store(&session_payload, 20);
-    luna_ble_frame_reset(&receiver);
+    clear_connection();
     ESP_LOGW(TAG, "NimBLE reset reason=%d", reason);
+    set_link_phase(LUNA_LINK_STARTING);
 }
 static void host_task(void *arg) { (void)arg; nimble_port_run(); nimble_port_freertos_deinit(); }
 
@@ -530,44 +574,59 @@ static void tx_task(void *arg)
     }
 }
 
-static void pairing_click(lv_event_t *event)
+static void pairing_answer(bool accept,unsigned displayed)
 {
-    if (!atomic_load(&pairing) || atomic_load(&pair_answer) >= 0) return;
-    atomic_store(&answer_generation, atomic_load(&pair_generation));
-    atomic_store(&pair_answer, (int)(intptr_t)lv_event_get_user_data(event));
+    if (!atomic_load(&pairing) || atomic_load(&pair_answer) >= 0 || displayed!=atomic_load(&pair_generation)) return;
+    atomic_store(&answer_generation,displayed);
+    atomic_store(&pair_answer,accept?1:0);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &pair_event);
 }
 
-static void recovery_click(lv_event_t *event)
+static void recovery_answer(unsigned displayed,bool accept)
 {
-    (void)event;
-    if (!atomic_load(&recovery_pending) || atomic_load(&pairing)) return;
-    atomic_store(&recovery_answer_generation, atomic_load(&recovery_generation));
+    if (!atomic_load(&recovery_pending) || atomic_load(&pairing) || displayed!=atomic_load(&recovery_generation)) return;
+    atomic_store(&recovery_answer_generation,displayed);
+    atomic_store(&recovery_accept,accept);atomic_store(&recovery_action_pending,true);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &recovery_event);
 }
+#ifndef CONFIG_LUNA_BLE_B1_MUSIC
+static void pairing_click(lv_event_t *event)
+{pairing_answer((bool)(intptr_t)lv_event_get_user_data(event),displayed_generation);}
+static void recovery_click(lv_event_t *event)
+{(void)event;recovery_answer(displayed_generation,true);}
+#endif
 
 static void ui_timer(lv_timer_t *timer)
 {
     (void)timer; ui_status_t item;
-    if (xQueueReceive(status_queue, &item, 0)) lv_label_set_text(status_label, item.text);
-    bool pending = atomic_load(&pairing);
+    if (xQueueReceive(status_queue, &item, 0)) {
+#ifndef CONFIG_LUNA_BLE_B1_MUSIC
+        lv_label_set_text(status_label,item.text);
+#endif
+    }
+    pairing_view_t pair_view;
+    if(!read_pairing_view(&pair_view))return;
+    bool pending=pair_view.pending;
     if (atomic_load(&recovery_pending) &&
         (uint32_t)(esp_timer_get_time()/1000 - atomic_load(&recovery_started)) >= 60000) atomic_store(&recovery_pending, false);
-#ifdef CONFIG_LUNA_BLE_B1_MUSIC
-    lv_obj_set_flag(diagnostic_page, LV_OBJ_FLAG_HIDDEN, !pending && !atomic_load(&recovery_pending));
-    // Do not allocate/repaint hidden diagnostic text ten times per second.
-    if(!pending && !atomic_load(&recovery_pending))return;
-#endif
-    lv_obj_set_flag(recovery_button, LV_OBJ_FLAG_HIDDEN, pending || !atomic_load(&recovery_pending));
-    if (pending && (uint32_t)(esp_timer_get_time()/1000 - atomic_load(&pair_started)) >= 30000 &&
+    if (pending && (uint32_t)(esp_timer_get_time()/1000 - pair_view.started) >= 30000 &&
         atomic_load(&pair_answer) < 0) {
         ESP_LOGW(TAG, "PAIR_TIMEOUT: no Luna confirmation within 30 seconds");
-        atomic_store(&answer_generation, atomic_load(&pair_generation)); atomic_store(&pair_answer, 0);
-        ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &pair_event);
+        pairing_answer(false,pair_view.generation);
     }
+#ifdef CONFIG_LUNA_BLE_B1_MUSIC
+    unsigned elapsed=(uint32_t)(esp_timer_get_time()/1000)-pair_view.started;
+    luna_connection_view_t view={.phase=atomic_load(&link_phase),.pairing=pending,
+        .recovery=atomic_load(&recovery_pending),.answer_pending=pending?atomic_load(&pair_answer)>=0:atomic_load(&recovery_action_pending),
+        .code=pair_view.code,.remaining_seconds=elapsed<30000?(30000-elapsed+999)/1000:0,
+        .generation=pending?pair_view.generation:atomic_load(&recovery_generation),.recovery_result=atomic_load(&recovery_result)};
+    luna_music_ui_connection(&view,pairing_answer,recovery_answer);
+#else
+    displayed_generation=pending?pair_view.generation:atomic_load(&recovery_generation);
+    lv_obj_set_flag(recovery_button, LV_OBJ_FLAG_HIDDEN, pending || !atomic_load(&recovery_pending));
     lv_obj_set_flag(accept_button, LV_OBJ_FLAG_HIDDEN, !pending);
     lv_obj_set_flag(reject_button, LV_OBJ_FLAG_HIDDEN, !pending);
-    if (pending) lv_label_set_text_fmt(pair_label, "Compare with Windows:\n%06u\nConfirm on BOTH screens", atomic_load(&pair_code));
+    if (pending) lv_label_set_text_fmt(pair_label, "Compare with Windows:\n%06u\nConfirm on BOTH screens", pair_view.code);
     else lv_label_set_text(pair_label, "B0 diagnostic only\nNo music / covers / USB CDC");
     unsigned security = atomic_load(&diagnostic_security);
     lv_label_set_text_fmt(diagnostic_label, "Confirm rc: %d   ENC: %d   Disconnect: %d\nEncrypted: %u   Auth: %u   Bond: %u   Key: %u",
@@ -579,6 +638,7 @@ static void ui_timer(lv_timer_t *timer)
         strftime(text, sizeof(text), "%Y-%m-%d  %H:%M:%S  CST", &tm);
         lv_label_set_text(clock_label, text);
     } else lv_label_set_text(clock_label, "Waiting for BLE time_sync");
+#endif
 }
 
 static void ui_start(void)
@@ -605,7 +665,7 @@ static void ui_start(void)
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
     luna_music_ui_start(screen);
-#endif
+#else
     diagnostic_page = lv_obj_create(screen);
     lv_obj_set_size(diagnostic_page, 720, 720); lv_obj_set_pos(diagnostic_page, 0, 0);
     lv_obj_set_style_bg_color(diagnostic_page, lv_color_hex(0x101827), 0);
@@ -634,6 +694,7 @@ static void ui_start(void)
     lv_obj_set_style_text_align(diagnostic_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(diagnostic_label, LV_ALIGN_BOTTOM_MID, 0, -125);
     clock_label = lv_label_create(screen); lv_obj_align(clock_label, LV_ALIGN_BOTTOM_MID, 0, -65);
+#endif
     lv_timer_create(ui_timer, 100, NULL); ui_timer(NULL);
     bsp_display_unlock();
 }
@@ -658,7 +719,7 @@ void app_main(void)
 #endif
     esp_err_t rc = nvs_flash_init();
     // Preserve NVS/bonds; do not erase the user's data to recover init errors.
-    if (rc != ESP_OK) { status("NVS init failed; preserve storage and stop BLE test"); return; }
+    if (rc != ESP_OK) { set_link_phase(LUNA_LINK_ERROR);status("NVS init failed; preserve storage and stop BLE test"); return; }
     esp_hosted_connect_to_slave();
     esp_hosted_coprocessor_fwver_t version;
     esp_err_t version_rc = esp_hosted_get_coprocessor_fwversion(&version);
@@ -680,10 +741,10 @@ void app_main(void)
             rc = esp_hosted_bt_controller_enable();
             ESP_LOGI(TAG, "C6 controller enable RPC: %d", (int)rc);
         }
-        if (rc != ESP_OK) { status("Existing C6 BLE controller unavailable; stop, do not flash C6 automatically"); return; }
+        if (rc != ESP_OK) { set_link_phase(LUNA_LINK_ERROR);status("Existing C6 BLE controller unavailable; stop, do not flash C6 automatically"); return; }
     }
     rc = nimble_port_init();
-    if (rc != ESP_OK) { status("NimBLE initialization failed"); return; }
+    if (rc != ESP_OK) { set_link_phase(LUNA_LINK_ERROR);status("NimBLE initialization failed"); return; }
     snprintf(boot_id, sizeof(boot_id), "%08" PRIx32 "%08" PRIx32, esp_random(), esp_random());
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
     luna_music_set_boot_id(boot_id);

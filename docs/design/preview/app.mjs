@@ -7,6 +7,7 @@ const pet = document.getElementById('pet');
 const sprite = document.getElementById('pet-sprite');
 const bubble = document.getElementById('pet-bubble');
 const model = new PreviewModel(performance.now());
+let connectionDemo='auto';
 const idleScreen = document.getElementById('idle-screen');
 document.getElementById('clock-ticks').innerHTML=Array.from({length:60},(_,i)=>{
   const a=i*Math.PI/30,r=i%5?194:183;
@@ -46,13 +47,16 @@ function quotaCard(d) {
   const q = d.quota;
   return header('CODEX', 'code', notes(d)) + `<section class="quota-section"><div class="quota-label"><span>5 小时剩余</span><strong>${pct(q.primary)}</strong></div>${progress(q.primary,'5 小时剩余额度')}</section><section class="quota-section weekly"><div class="quota-label"><span>周额度剩余</span><strong>${pct(q.weekly)}</strong></div>${progress(q.weekly,'周剩余额度')}</section><div class="project">${icon('code')}<div><div class="project-label">当前 VS Code 项目${d.project.stale ? ' · 上次信息' : ''}</div><div class="project-name" title="${esc(d.project.name)}">${d.project.available ? esc(d.project.name) : '尚未识别工程'}</div></div></div>` + bottom(`额度更新 ${q.updated} · 示例`, '', d.stale);
 }
-function gauge(value, temp, label, cls = '') {
+function gauge(value, label, cls = '') {
   const p = percent(value);
-  return `<div class="gauge ${cls}" role="img" aria-label="${label}使用率 ${p === null ? '不可用' : `${p}%`}，温度 ${temp === null ? '不可用' : `${temp}摄氏度`}"><svg viewBox="0 0 144 144"><circle class="gauge-track" cx="72" cy="72" r="62"/><circle class="gauge-value" cx="72" cy="72" r="62" style="--value:${p ?? 0};${p === null ? 'visibility:hidden' : ''}"/></svg><div class="gauge-number">${p === null ? '--' : p}<small>${p === null ? '' : '%'}</small><span class="gauge-label">${label}</span></div><div class="gauge-temp">${temp === null ? '温度不可用' : `${temp} °C`}</div></div>`;
+  return `<div class="gauge ${cls}" role="img" aria-label="${label}使用率 ${p === null ? '不可用' : `${p}%`}"><svg viewBox="0 0 160 160"><circle class="gauge-track" cx="80" cy="80" r="66" pathLength="100" stroke-dasharray="75 100"/><circle class="gauge-value" cx="80" cy="80" r="66" pathLength="100" stroke-dasharray="${(p ?? 0)*.75} 100" style="${p === null ? 'visibility:hidden' : ''}"/></svg><div class="gauge-number">${p === null ? '--' : Math.round(p)}<small>${p === null ? '' : '%'}</small><span class="gauge-label">${label}</span></div></div>`;
+}
+function memoryRow(name, value, capacity, cls = '') {
+  return `<div class="memory-row ${cls}"><div class="memory-label"><span>${name}</span><span class="memory-capacity">${value === null ? '不可用' : capacity}</span><strong>${value === null ? '--' : pct(value)}</strong></div>${progress(value,`${name}使用率`)}</div>`;
 }
 function computerCard(d) {
   const c = d.computer;
-  return header('COMPUTER', 'computer', notes(d)) + `<div class="computer-name" title="${esc(c.name)}">${esc(c.name)}</div><div class="gauges">${gauge(c.cpu,c.cpuTemp,'CPU')}${gauge(c.gpu,c.gpuTemp,'GPU','gpu')}</div><div class="memory-section"><div class="memory-row"><div class="memory-label"><span>内存</span><span>${c.ram === null ? '不可用' : `${c.ramLabel} · ${pct(c.ram)}`}</span></div>${progress(c.ram,'内存使用率')}</div><div class="memory-row"><div class="memory-label"><span>显存</span><span>${c.vram === null ? '不可用' : `${c.vramLabel} · ${pct(c.vram)}`}</span></div>${progress(c.vram,'显存使用率')}</div></div>` + bottom(c.available ? '采样口径与硬件支持待实测' : '等待电脑状态', '示例 · 非本机读数', d.stale);
+  return header('COMPUTER', 'computer', notes(d)) + `<div class="computer-name" title="${esc(c.name)}">${esc(c.name)}</div><div class="gauges">${gauge(c.cpu,'CPU')}${gauge(c.gpu,'GPU','gpu')}</div><div class="memory-section">${memoryRow('内存',c.ram,c.ramLabel)}${memoryRow('显存',c.vram,c.vramLabel,'gpu')}</div>` + bottom(c.available ? '2 秒采样' : '等待电脑状态', '示例 · 非本机读数', d.stale);
 }
 function focusCard(){
   return header('FOCUS','moon','')+`<div id="focus-status">准备专注</div><div class="focus-digital"><div id="focus-hint">剩余专注时间</div><div id="focus-time" role="timer" aria-live="off">25:00</div><div class="focus-track"><div id="focus-progress"></div></div></div><div class="focus-presets">${[25,45,60].map(minutes=>`<button data-action="focus-${minutes}" data-minutes="${minutes}" aria-pressed="false">${minutes} 分钟</button>`).join('')}<button id="focus-custom" data-action="focus-custom">自定义</button></div><div class="focus-controls"><button id="focus-toggle" data-action="focus-start">开始</button><button data-action="focus-end">结束</button></div>`;
@@ -88,7 +92,8 @@ function syncChrome() {
   popup.hidden = !model.volumeOpen;
   const connection = document.getElementById('connection');
   connection.classList.toggle('offline', !d.pc);
-  connection.querySelector('span').textContent = d.pc ? '蓝牙 · 示例已连接' : '蓝牙 · 示例未连接';
+  const phase={pairing:'连接中',recovery:'等待连接',securing:'连接中',ready:'已配对',waiting:'等待连接',error:'连接异常'}[connectionDemo];
+  connection.querySelector('span').textContent = phase?`蓝牙 · 示例${phase}`:d.pc ? '蓝牙 · 示例已连接' : '蓝牙 · 示例未连接';
   document.getElementById('volume-value').textContent = `${model.volume}%`;
   document.getElementById('volume-slider').value = model.volume;
   const mute = popup.querySelector('[data-action="mute"]');
@@ -127,7 +132,7 @@ let swipe = null;
 let petPress = null;
 let wakePointer=null,suppressClickUntil=0;
 root.addEventListener('pointerdown', event => {
-  if(model.focusEditing)return;
+  if(model.focusEditing||model.connectionModal)return;
   if(model.touch(performance.now())==='wake') {
     wakePointer=event.pointerId;suppressClickUntil=performance.now()+1000;syncChrome();
     event.preventDefault();event.stopImmediatePropagation();return;
@@ -171,6 +176,12 @@ window.addEventListener('pointerup', () => { petPress = null; if (model.dragging
 window.addEventListener('pointercancel', () => { petPress = null; if (model.dragging) model.endDrag(performance.now()); },true);
 pet.addEventListener('lostpointercapture', () => { petPress = null; });
 root.addEventListener('click', event => {
+  if(model.connectionModal){
+    event.preventDefault();event.stopImmediatePropagation();
+    const action=event.target.closest('[data-ble-action]')?.dataset.bleAction;
+    if(action)setConnectionDemo(action==='accept'?'ready':'waiting',action==='recover'?'旧配对已移除，请在电脑重新添加 Luna':'');
+    return;
+  }
   if(model.focusEditing){handleFocusEditor(event);return;}
   if(performance.now()<suppressClickUntil||model.idle){event.preventDefault();event.stopImmediatePropagation();return;}
   model.touch(performance.now());
@@ -184,6 +195,12 @@ root.addEventListener('click', event => {
   else if (button.id === 'pet') { const now=performance.now(); model.command('pet',now); syncChrome(); paintPet(now,0); }
 }, true);
 root.addEventListener('keydown', event => {
+  if(model.connectionModal){
+    if(event.key==='Tab')return;
+    if(event.key==='Escape'){event.preventDefault();setConnectionDemo('waiting');return;}
+    if(event.key==='Enter'||event.key===' ')return;
+    event.preventDefault();event.stopImmediatePropagation();return;
+  }
   if(model.focusEditing){focusEditorKey(event);return;}
   if (!['ArrowLeft','ArrowRight','Enter',' '].includes(event.key) || event.target.closest('input,select')) return;
   if(model.touch(performance.now())==='wake'){event.preventDefault();syncChrome();return;}
@@ -228,7 +245,7 @@ function paintPet(now,dt) {
   pet.dataset.motion = responding ? 'response' : petPress !== null ? 'pressed' : reducedMotion.matches || resting ? 'rest' : 'walk';
   const position = reducedMotion.matches ? {x:590,y:596,left:false} : motion.position;
   pet.style.left = `${position.x}px`; pet.style.top = `${position.y}px`;
-  bubble.hidden = model.focusEditing||(!responding&&!model.focus.notice);
+  bubble.hidden = model.focusEditing||model.connectionModal||(!responding&&!model.focus.notice);
   bubble.style.width=model.focus.notice?'104px':'64px';
   bubble.textContent=model.focus.notice?'休息一下':'喵～';
   if(responding||model.focus.notice) {
@@ -261,12 +278,29 @@ function paintFocus(now){
   document.querySelector('[data-action="focus-end"]').disabled=f.state==='idle';
 }
 const focusEditor=document.getElementById('focus-editor'),focusInput=document.getElementById('focus-minutes');
+const bleEditor=document.getElementById('ble-editor');
 let focusReplace=true;
 document.querySelector('.focus-key-grid').innerHTML=['1','2','3','4','5','6','7','8','9','清空','0','退格'].map(key=>`<button data-focus-key="${key}" aria-label="${key}">${key==='退格'?'⌫':key}</button>`).join('');
 function syncFocusEditor(){
   focusEditor.hidden=!model.focusEditing;
-  for(const child of root.children)if(child!==focusEditor)child.inert=model.focusEditing;
+  for(const child of root.children)if(child!==focusEditor&&child!==bleEditor)child.inert=model.focusEditing||model.connectionModal;
+  focusEditor.inert=model.connectionModal;bleEditor.inert=model.focusEditing;
 }
+function setConnectionDemo(value,feedback=''){
+  connectionDemo=value;document.getElementById('connection-demo').value=value;
+  const pair=value==='pairing',recover=value==='recovery';
+  model.setConnectionModal(pair||recover,performance.now());
+  bleEditor.hidden=!model.connectionModal;
+  bleEditor.classList.toggle('recovery',recover);
+  document.querySelector('#ble-heading span').textContent=pair?'蓝牙配对':'重新配对';
+  document.getElementById('ble-detail').innerText=pair?'请核对电脑与 Luna 上的六位数字\n一致后，在两端分别确认':'电脑可能已移除了 Luna，\n但设备仍保留此前的配对。\n仅在需要重新配对时继续。';
+  document.getElementById('ble-note').innerText=pair?'请在 28 秒内确认\n数字不一致，请拒绝本次配对':'只移除此电脑的旧配对，其他配对不受影响\n随后在 Windows 中重新添加 Luna';
+  const notice=document.getElementById('ble-feedback');
+  notice.textContent=feedback||(value==='error'?'蓝牙连接未完成，请稍后重试':'');notice.hidden=!notice.textContent;
+  swipe=null;petPress=null;syncFocusEditor();syncChrome();
+  if(model.connectionModal)bleEditor.querySelector(`[data-ble-action="${pair?'accept':'recover'}"]`).focus({preventScroll:true});
+}
+document.getElementById('connection-demo').addEventListener('change',event=>setConnectionDemo(event.target.value));
 function openFocusEditor(){
   if(!model.openFocusEditor())return;
   focusInput.value=String(model.focus.minutes);focusReplace=true;

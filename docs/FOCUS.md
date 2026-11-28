@@ -1,6 +1,6 @@
 # 专注卡 / Focus timer
 
-适用 **2026.11.27 定版**，应用内版本 **2026.11.27-focus-align**。此前五卡固件没有本功能。
+适用 **2026.11.28 定版**，应用内版本 **2026.11.28-computer**。此前五卡固件没有本功能。
 
 从底部点击“专注”，或左右滑动进入第六张卡。
 
@@ -18,7 +18,7 @@ B 布局用大数字和薄荷绿进度条显示剩余时间，卡片内没有额
 
 ## English
 
-Release **2026.11.27** (embedded app **2026.11.27-focus-align**) provides the sixth Focus card; older five-card releases do not include it.
+Release **2026.11.28** (embedded app **2026.11.28-computer**) provides the sixth Focus card; older five-card releases do not include it.
 
 Choose **25 / 45 / 60 minutes**, or **自定义** (custom) for an integer **1–999 minutes**. The green K2 keypad offers digits, clear and backspace. Confirm sets the duration without starting; cancel/close preserves the previous value. Its full-screen overlay blocks background cards, navigation, gestures and standby.
 

@@ -9,6 +9,11 @@
 #include "../../firmware/luna-panel/main/luna_preview_ui.c"
 static int64_t test_us=1000000;
 static unsigned action_count;
+static unsigned pair_answers,bond_answers,displayed_pair_generation;
+static bool pair_accepted;
+static void test_pair_answer(bool accept,unsigned generation){pair_answers++;pair_accepted=accept;displayed_pair_generation=generation;}
+static bool bond_accepted;
+static void test_bond_answer(unsigned generation,bool accept){bond_answers++;displayed_pair_generation=generation;bond_accepted=accept;}
 static bool test_power_idle;
 static unsigned dashboard_reads,music_reads,weather_reads;
 static luna_setup_ap_state_t test_ap;
@@ -224,6 +229,27 @@ int main(int argc,char **argv)
     assert(!strcmp(lv_label_get_text(quota_values[0]),"44%"));
     assert(lv_obj_get_width(quota_bars[0])==238);assert(lv_arc_get_value(gauges[0])==37);
     assert(strstr(lv_label_get_text(memory_values[0]),"11.1 / 15.8"));
+    for(unsigned i=0;i<2;i++){
+        assert(lv_arc_get_bg_angle_start(gauges[i])==0&&lv_arc_get_bg_angle_end(gauges[i])==270);
+        assert(lv_obj_get_y(gauge_values[i])==46);
+        assert(lv_obj_get_style_text_font(gauge_units[i],0)==&lv_font_montserrat_20);
+        assert(lv_obj_get_height(memory_bars[i])==12);
+        assert(lv_obj_get_style_text_font(memory_values[i],0)==&luna_cjk_18);
+        assert(lv_obj_get_style_text_font(memory_percent[i],0)==&lv_font_montserrat_24);
+    }
+    choose_card(4,0);test_dashboard.cpu=100;test_dashboard.gpu=-1;
+    test_dashboard.vram_used_gb=-1;advance(600);lv_obj_update_layout(cards[4]);
+    assert(!strcmp(lv_label_get_text(gauge_values[0]),"100"));
+    assert(lv_obj_has_flag(gauge_units[1],LV_OBJ_FLAG_HIDDEN));
+    assert(!strcmp(lv_label_get_text(memory_percent[1]),"--"));
+    assert(lv_obj_has_flag(memory_bars[1],LV_OBJ_FLAG_HIDDEN));
+    lv_area_t ring_area,number_area,unit_area;
+    lv_obj_get_coords(lv_obj_get_parent(gauge_values[0]),&ring_area);
+    lv_obj_get_coords(gauge_values[0],&number_area);lv_obj_get_coords(gauge_units[0],&unit_area);
+    assert(number_area.x1>=ring_area.x1+12&&unit_area.x2<=ring_area.x2-12);
+    test_dashboard.cpu=37;test_dashboard.gpu=24;test_dashboard.vram_used_gb=1.3;advance(600);
+    save("computer");
+    puts("PASS B open dials, lower readings, large memory blocks and unknown metrics");
     for(unsigned i=0;i<CARD_COUNT;i++)assert(lv_obj_get_style_bg_opa(cards[i],0)==255);
     lv_refr_now(NULL);uint32_t clean_computer=computer_background_hash();
     choose_card(0,0);lv_label_set_text(clock_hm,"88:88");lv_refr_now(NULL);
@@ -419,5 +445,57 @@ int main(int argc,char **argv)
     assert_visible_text_centered(pet_bubble);save("focus-greeting-centered");
     puts("PASS rendered-ink center within one pixel: greeting/rest bubbles, custom/default/999-minute labels, start/pause/resume/restart/end including disabled end");
     puts("PASS B focus, green K2 real LVGL keyboard, modal blocks background clicks/swipes/standby, custom commit/cancel, running blocks manual/auto idle across cards, paused permits idle, completion reminder; no media action");
+    unsigned before_pair_actions=action_count;
+    test_music.online=false;update(NULL);
+    luna_connection_view_t view={.phase=LUNA_LINK_ACTIVE};
+    luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);update(NULL);
+    assert(!strcmp(lv_label_get_text(connection),"蓝牙 · 已连接"));
+    view.phase=LUNA_LINK_READY;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);
+    assert(!strcmp(lv_label_get_text(connection),"蓝牙 · 已配对"));
+    set_idle(true);assert(idle);
+    view=(luna_connection_view_t){.phase=LUNA_LINK_SECURING,.pairing=true,.code=123456,.remaining_seconds=28,.generation=17};
+    luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);advance(50);
+    assert(ble_modal&&!idle&&!strcmp(lv_label_get_text(ble_heading),"蓝牙配对"));
+    assert(!strcmp(lv_label_get_text(ble_number),"123456"));save("ble-pairing");
+    lv_area_t accept_bounds;lv_obj_get_coords(ble_accept,&accept_bounds);
+    int accept_x=(accept_bounds.x1+accept_bounds.x2)/2,accept_y=(accept_bounds.y1+accept_bounds.y2)/2;
+    pointer(accept_x,accept_y,true);
+    view.code=987654;view.generation=18;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);
+    pointer(accept_x,accept_y,false);advance(50);assert(pair_answers==0);
+    view.code=123456;view.generation=17;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);
+    unsigned prior_card=active;click(617,668);choose_card((active+1)%CARD_COUNT,1);set_idle(true);
+    pointer(500,430,true);pointer(350,430,true);pointer(250,430,false);advance(300);
+    test_us+=IDLE_US+1000000;update(NULL);assert(ble_modal&&!idle&&active==prior_card);
+    click_object(ble_accept);click_object(ble_accept);
+    assert(pair_answers==1&&pair_accepted&&displayed_pair_generation==17&&action_count==before_pair_actions);
+    view.pairing=false;view.phase=LUNA_LINK_READY;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);
+    assert(!ble_modal&&!idle&&last_touch==test_us);update(NULL);assert(!idle);
+    choose_card(5,0);click_object(focus_custom);assert(focus_editing);
+    view.pairing=true;view.phase=LUNA_LINK_SECURING;view.code=654321;view.generation=18;
+    luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);
+    assert(ble_modal&&!focus_editing);click_object(ble_reject);
+    assert(pair_answers==2&&!pair_accepted&&displayed_pair_generation==18);
+    view.pairing=false;view.recovery=true;view.generation=19;
+    luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);advance(50);save("ble-recovery");
+    assert(!strcmp(lv_label_get_text(ble_heading),"重新配对"));click_object(ble_recover);
+    assert(bond_answers==1&&bond_accepted&&displayed_pair_generation==19);
+    view.answer_pending=false;view.generation=20;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);
+    click_object(ble_defer);assert(bond_answers==2&&!bond_accepted&&displayed_pair_generation==20);
+    view.recovery_result=-1;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);advance(50);
+    assert(strstr(lv_label_get_text(ble_note),"处理失败")&&!lv_obj_has_state(ble_recover,LV_STATE_DISABLED));
+    save("ble-recovery-failed");
+    view=(luna_connection_view_t){.phase=LUNA_LINK_WAITING};
+    view.recovery_result=1;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);advance(50);
+    assert(!lv_obj_has_flag(ble_feedback,LV_OBJ_FLAG_HIDDEN));save("ble-recovery-saved");
+    view.recovery_result=0;
+    luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);update(NULL);advance(50);save("ble-waiting");
+    assert(!ble_modal&&!idle&&action_count==before_pair_actions);
+    choose_card(5,0);assert(luna_focus_select(&focus,1));assert(luna_focus_start(&focus,test_us));
+    view.pairing=true;view.generation=30;view.code=333333;
+    luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);test_us=focus.deadline_us;update(NULL);
+    assert(ble_modal&&focus.state==LUNA_FOCUS_DONE&&focus.notice&&lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN));
+    view.pairing=false;luna_music_ui_connection(&view,test_pair_answer,test_bond_answer);update(NULL);
+    assert(!ble_modal&&!idle&&focus.notice&&!lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN));
+    puts("PASS Chinese BLE pairing/recovery modal, independent transport badge, real pointer answers with displayed generation, blocks background swipe/navigation/idle and resumes without media action");
     lv_obj_update_layout(root);puts("Native UI assertions passed; rendered six cards, volume and manual/automatic clock");return 0;
 }

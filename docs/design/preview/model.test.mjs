@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CARDS, PreviewModel, FocusTimer, demoSnapshot, percent, petPosition, petMotion } from './model.mjs';
 
+test('BLE modal wakes, cancels duration edit and blocks background operations without media actions',()=>{
+  const m=new PreviewModel(0);m.chooseCard('focus');m.openFocusEditor();m.setConnectionModal(true,100);
+  assert.equal(m.focusEditing,false);assert.equal(m.idle,false);
+  assert.equal(m.navigate(1),false);m.chooseCard('music');assert.equal(m.card,'focus');
+  assert.equal(m.command('toggle'),false);assert.equal(m.beginDrag(200),false);
+  assert.equal(m.openFocusEditor(),false);assert.equal(m.enterIdle(),false);m.tick(999999);
+  assert.equal(m.idle,false);assert.equal(m.actions,0);
+  m.setConnectionModal(false,1000000);m.tick(1000001);assert.equal(m.idle,false);
+  assert.equal(m.navigate(1),true);assert.equal(m.card,'clock');
+});
+test('focus still completes behind BLE modal and keeps reminder after close',()=>{
+  const m=new PreviewModel(0);m.focus.select(1);m.focus.start(0);m.chooseCard('weather');
+  m.setConnectionModal(true,1);m.tick(60000);assert.equal(m.focus.state,'done');
+  assert.equal(m.focus.notice,true);assert.equal(m.idle,false);assert.equal(m.card,'weather');
+  m.setConnectionModal(false,61000);m.tick(61001);assert.equal(m.idle,false);assert.equal(m.focus.notice,true);
+});
+
 test('boot always starts at the clock card, not the last business card', () => {
   assert.equal(new PreviewModel().card, 'clock'); assert.equal(CARDS.length,6);
 });

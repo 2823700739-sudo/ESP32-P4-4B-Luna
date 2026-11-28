@@ -30,7 +30,7 @@ static QueueHandle_t setup_queue;
 static SemaphoreHandle_t setup_mutex;
 static luna_ble_wifi_setup_status_t setup_status;
 static bool driver_initialized, wifi_events, ip_events;
-static atomic_bool station_enabled;
+static atomic_bool station_enabled, reconnect_requested, reconnect_reassociate;
 typedef struct {
     bool trial;
     luna_weather_config_t config;
@@ -93,14 +93,40 @@ static void network_ready(bool ready)
 #endif
 }
 
+static void request_reconnect(bool reassociate)
+{
+    /* Publish the work item last: the worker must see the matching action. */
+    if(reassociate)atomic_store(&reconnect_reassociate,true);
+    atomic_store(&reconnect_requested,true);
+}
 static void recover(void *arg)
 {
     (void)arg;
+    /* ESP timers are shared. Hosted calls can wait seconds for C6, so only
+       signal the worker here; the default event loop follows the same rule. */
+    request_reconnect(true);
+}
+
+static void service_reconnect(void)
+{
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
-    if (atomic_load(&scan_busy)) {esp_timer_start_once(recovery_timer,5000000);return;}
+    if (atomic_load(&scan_busy)) return;
 #endif
     if (atomic_load(&station_enabled) && !atomic_load(&online) && !atomic_load(&reconfiguring)) {
-        if (esp_wifi_connect() != ESP_OK) esp_timer_start_once(recovery_timer, 30000000);
+        if (!atomic_exchange(&reconnect_requested,false)) return;
+        if (atomic_exchange(&reconnect_reassociate,false)) {
+            /* A station can remain associated after losing DHCP. Starting a
+               fresh association is required; connect alone may return busy. */
+            atomic_store(&reconfiguring,true);
+            (void)esp_wifi_disconnect();
+            atomic_store(&reconfiguring,false);
+        }
+        esp_err_t rc=esp_wifi_connect();
+        /* Even a successful RPC needs a watchdog until GOT_IP. An immediate
+           failure may never emit DISCONNECTED, so it must also retain retry. */
+        if (!atomic_load(&online) && !esp_timer_is_active(recovery_timer))
+            esp_timer_start_once(recovery_timer,30000000);
+        if (rc!=ESP_OK) ESP_LOGW(TAG,"Wi-Fi connect deferred after RPC error %d",rc);
     }
 }
 
@@ -113,19 +139,29 @@ static void network_event(void *arg, esp_event_base_t base, int32_t id, void *da
         atomic_store(&scan_done,event && event->status==0?1:-1);
     }
 #endif
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START && atomic_load(&station_enabled)) esp_wifi_connect();
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START && atomic_load(&station_enabled))
+        request_reconnect(false);
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         network_ready(false);
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
         if (atomic_load(&scan_busy)) return; /* Worker resumes recovery after scan. */
 #endif
         if (atomic_load(&reconfiguring) || !atomic_load(&station_enabled)) return;
-        if (atomic_fetch_add(&retries, 1) < 3) esp_wifi_connect();
+        if (atomic_fetch_add(&retries, 1) < 3) request_reconnect(false);
         else if (!esp_timer_is_active(recovery_timer)) esp_timer_start_once(recovery_timer, 30000000);
         ESP_LOGW(TAG, "Wi-Fi offline; BLE remains independent");
     }
-    if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP && !atomic_load(&reconfiguring)) {
+    if (base == IP_EVENT && id == IP_EVENT_STA_LOST_IP) {
+        network_ready(false);
+        if (atomic_load(&station_enabled) && !atomic_load(&reconfiguring))
+        {
+            request_reconnect(true);
+        }
+    }
+    if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP && atomic_load(&station_enabled) && !atomic_load(&reconfiguring)) {
         atomic_store(&retries, 0);
+        atomic_store(&reconnect_requested,false);
+        atomic_store(&reconnect_reassociate,false);
         if (esp_timer_is_active(recovery_timer)) esp_timer_stop(recovery_timer);
         network_ready(true);
         ESP_LOGI(TAG, "Wi-Fi online; device-owned HTTPS weather enabled");
@@ -232,7 +268,7 @@ static esp_err_t init_wifi(void)
         wifi_events=true;
     }
     if (!ip_events) {
-        ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT,IP_EVENT_STA_GOT_IP,network_event,NULL),TAG,"IP events failed");
+        ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT,ESP_EVENT_ANY_ID,network_event,NULL),TAG,"IP events failed");
         ip_events=true;
     }
     return ESP_OK;
@@ -383,7 +419,9 @@ static void close_ap(void)
             strlcpy(prior.password,CONFIG_LUNA_WIFI_PASSWORD,sizeof(prior.password));
             (void)apply_settings(&prior);
         } else {
-            atomic_store(&station_enabled,false);(void)esp_wifi_disconnect();network_ready(false);
+            atomic_store(&station_enabled,false);atomic_store(&reconnect_requested,false);
+            atomic_store(&reconnect_reassociate,false);
+            (void)esp_timer_stop(recovery_timer);(void)esp_wifi_disconnect();network_ready(false);
         }
         luna_weather_config_clear(&prior,sizeof(prior));trial_active=false;
     }
@@ -432,6 +470,8 @@ static esp_err_t apply_settings(const luna_weather_config_t *settings)
 {
     atomic_store(&reconfiguring,true);
     atomic_store(&retries,0);
+    atomic_store(&reconnect_requested,false);
+    atomic_store(&reconnect_reassociate,false);
     (void)esp_timer_stop(recovery_timer);
     network_ready(false);
     luna_weather_state_t location={.configured=true,.coordinates_valid=true,
@@ -440,8 +480,7 @@ static esp_err_t apply_settings(const luna_weather_config_t *settings)
     if (location.location[0]) luna_weather_set_location(&location);
     esp_err_t rc=apply_wifi(settings);
     atomic_store(&reconfiguring,false);
-    /* STA_START may already have run; an extra connect can return "connecting". */
-    if (rc==ESP_OK) (void)esp_wifi_connect();
+    if (rc==ESP_OK) request_reconnect(false);
     return rc;
 }
 
@@ -483,6 +522,7 @@ static void setup_worker(void *unused)
         if (ap.active && ap_committed && !trial_active && atomic_load(&online) && !ap_close_after)
             ap_close_after=esp_timer_get_time()+20000000;
 #endif
+        service_reconnect();
         if (xQueueReceive(setup_queue,&job,pdMS_TO_TICKS(250))!=pdTRUE) continue;
         settings=job.config;
         if (job.trial) {
@@ -494,12 +534,14 @@ static void setup_worker(void *unused)
             }
 #endif
             atomic_store(&reconfiguring,true);network_ready(false);
+            atomic_store(&retries,0);atomic_store(&reconnect_requested,false);
+            atomic_store(&reconnect_reassociate,false);(void)esp_timer_stop(recovery_timer);
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC
             memcpy(trial_ssid,settings.ssid,sizeof(trial_ssid));
 #endif
             esp_err_t rc=apply_wifi(&settings);
             atomic_store(&reconfiguring,false);
-            if (rc==ESP_OK) (void)esp_wifi_connect();
+            if (rc==ESP_OK) request_reconnect(false);
             xSemaphoreTake(setup_mutex,portMAX_DELAY);
             setup_status=job.prior;
 #ifdef CONFIG_LUNA_BLE_B1_MUSIC

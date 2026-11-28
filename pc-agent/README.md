@@ -4,6 +4,8 @@
 
 `luna_ble_link.py` connects to paired, authenticated Luna over BLE. Windows GSMTC supplies music metadata and explicit playback controls; Core Audio handles system volume/mute. Background collectors supply CPU/GPU/RAM/VRAM, local Codex quota and the most recent foreground VS Code workspace title. The process opens no serial port or HTTP listener.
 
+CPU uses an independent total PDH Processor Utility query, targeting the Windows 11 23H2 Task Manager Performance/CPU reading. It is not GetSystemTimes busy time or a scaled approximation. Warmup/failure stays unknown; a failed CPU query closes and retries after 30 seconds without interrupting GPU/RAM. GPU keeps its own query/recovery. Task Manager metrics can differ across Windows versions; compare equivalent sampling windows when checking another version. Temperature fields remain null for protocol compatibility and are no longer shown on the computer card.
+
 ## Install and run
 
 Use Windows 11 x64 and 64-bit x64 Python 3.11. From the repository root:

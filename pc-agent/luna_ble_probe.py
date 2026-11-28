@@ -131,7 +131,9 @@ async def wait_security_ready(client, timeout: float = 45):
 
 
 @asynccontextmanager
-async def connected_session(device, auth_timeout: float = 45, att_payload_cap: int = 512, session_factory=ProbeSession):
+async def connected_session(device, auth_timeout: float = 45, att_payload_cap: int = 512,
+                            session_factory=ProbeSession, notify_timeout: float = 10,
+                            cleanup_timeout: float = 3):
     from bleak import BleakClient
     session = None
     def disconnected(_client):
@@ -146,12 +148,19 @@ async def connected_session(device, auth_timeout: float = 45, att_payload_cap: i
         session = session_factory(client, att_payload_cap=att_payload_cap)
         notifying = False
         try:
-            await client.start_notify(TX_UUID, session.notification)
+            await asyncio.wait_for(client.start_notify(TX_UUID, session.notification), notify_timeout)
             notifying = True
             yield session
         finally:
             session.disconnected()
-            if notifying and client.is_connected: await client.stop_notify(TX_UUID)
+            if notifying and client.is_connected:
+                try:
+                    await asyncio.wait_for(client.stop_notify(TX_UUID), cleanup_timeout)
+                except Exception:
+                    # Cleanup is best effort. Preserve the original request error
+                    # or cancellation and let Bleak disconnect the connection.
+                    # Never log exception text, which may contain peer details.
+                    pass
 
 
 async def run(args) -> int:

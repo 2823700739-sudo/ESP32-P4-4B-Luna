@@ -1,6 +1,6 @@
 # Luna 部署教程
 
-本教程对应 **2026.11.27**，位于主分支 **main**，固定标签 **v2026.11.27**，应用内版本 **2026.11.27-focus-align**。首次安装用合并 bin 写 `0x0`；已有相同分区的 Luna 用 app 写 `0x20000`。随后按[手机教程](PHONE-SETUP.md)设置 Wi-Fi 和天气地点。只用时钟/天气/专注无需运行电脑 Agent。也可先看[快速部署](HUB-QUICKSTART.md)与[专注说明](FOCUS.md)。
+本教程对应 **2026.11.28**，位于主分支 **main**，固定标签 **v2026.11.28**，应用内版本 **2026.11.28-computer**。首次安装用合并 bin 写 `0x0`；已有相同分区的 Luna 用 app 写 `0x20000`。随后按[手机教程](PHONE-SETUP.md)设置 Wi-Fi 和天气地点。只用时钟/天气/专注无需运行电脑 Agent。也可先看[快速部署](HUB-QUICKSTART.md)与[专注说明](FOCUS.md)。
 
 **中文** · [English](DEPLOYMENT.en.md) · [项目介绍](../README.md)
 
@@ -28,7 +28,7 @@ cd ESP32-P4-4B-Luna
 
 ## 2. 文件与校验
 
-公开文件在 [固件目录](../firmware/releases/2026.11.27/README.md)：
+公开文件在 [固件目录](../firmware/releases/2026.11.28/README.md)：
 
 | 文件 | 作用 | 写入地址 |
 | --- | --- | --- |
@@ -39,8 +39,8 @@ cd ESP32-P4-4B-Luna
 | `manifest.json` / `SHA256SUMS.txt` | 版本、硬件、地址、大小与 SHA-256 | 不刷写 |
 
 ```powershell
-Get-Content firmware/releases/2026.11.27/SHA256SUMS.txt
-Get-FileHash firmware/releases/2026.11.27/*.bin -Algorithm SHA256
+Get-Content firmware/releases/2026.11.28/SHA256SUMS.txt
+Get-FileHash firmware/releases/2026.11.28/*.bin -Algorithm SHA256
 ```
 
 所下载 bin 的哈希均应与校验文件一致。只下载 bin 与清单，不下载或刷写维护者的 NVS、配对、TF、私人配置和全片 Flash 备份。
@@ -71,7 +71,7 @@ py -3.11 -m venv .venv-flash
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x20000 firmware/releases/2026.11.27/luna-panel.bin
+  0x20000 firmware/releases/2026.11.28/luna-panel.bin
 ```
 
 该命令只写 app，不写分区表、NVS、TF 或 C6。已有运行时保存的网络/地点继续保留；仅编译进旧 app 的密码不会自动继承，可通过[手机设置](PHONE-SETUP.md)重新配置。公开 app 不含维护者个人网络信息。
@@ -93,14 +93,14 @@ py -3.11 -m venv .venv-flash
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x0 firmware/releases/2026.11.27/luna-first-install-0x0.bin
+  0x0 firmware/releases/2026.11.28/luna-first-install-0x0.bin
 ```
 
 默认 115200 速率下，压缩数据传输仍可能需要约十分钟；进度正常时不要断电。需要加快且串口稳定时，可在 `--port COMx` 后添加 `--baud 460800`，本次备用板已用该速率完成写入及校验。
 
 文件已内置正确的 DIO / 80 MHz / 32 MB 参数。不需要在本地合并或安装 ESP-IDF。若使用已有的兼容 P4 下载工具，同样只勾选该文件、填 `0x0`；不要勾选整片擦除、不要改为 app 地址 `0x20000`。合并 raw 文件开头是填充字节，不能依赖工具从首字节自动校验所有内嵌镜像的芯片版本，所以必须先核对上述硬件条件。
 
-合并文件长 `9977632` bytes（`0x983f20`），扇区擦写结束地址为 `0x984000`（不含），没有填满 32 MB。该写入范围不覆盖 `0xA20000` 开始的 storage，也不写 TF 或独立的 C6 Flash；这不表示 NVS 得到保留。
+合并文件长 `10006992` bytes（`0x98b1d0`），扇区擦写结束地址为 `0x98c000`（不含），没有填满 32 MB。该写入范围不覆盖 `0xA20000` 开始的 storage，也不写 TF 或独立的 C6 Flash；这不表示 NVS 得到保留。
 
 ### 可选：分文件安装
 
@@ -109,9 +109,9 @@ py -3.11 -m venv .venv-flash
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x2000 firmware/releases/2026.11.27/bootloader.bin `
-  0x10000 firmware/releases/2026.11.27/partition-table.bin `
-  0x20000 firmware/releases/2026.11.27/luna-panel.bin
+  0x2000 firmware/releases/2026.11.28/bootloader.bin `
+  0x10000 firmware/releases/2026.11.28/partition-table.bin `
+  0x20000 firmware/releases/2026.11.28/luna-panel.bin
 ```
 
 烧录后松开 BOOT 并重启 P4，保持 DC 供电。应出现六卡界面、触摸切卡与蓝牙初始化；时钟需要下一节 Agent 校时，天气和额度不会因烧录而自动配置。如果报告芯片不兼容、NVS 初始化失败或 C6 controller unavailable，停止并查明原因，不用 force 或整片擦除绕过。
@@ -178,8 +178,8 @@ Get-Content pc-agent/ble-link.log -Tail 12
 对仓库中已发布的三份无凭据 bin，可用独立刷写环境离线重现合并包；不要把私人构建 bin 覆盖进公开目录：
 
 ```powershell
-.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.27
-.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.27 --check
+.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.28
+.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.28 --check
 ```
 
 脚本在合并前核对原三份文件的地址、大小、SHA 与 B1 分区，合并后核对各段原字节和填充区；不连接设备，不将文件填满 Flash。

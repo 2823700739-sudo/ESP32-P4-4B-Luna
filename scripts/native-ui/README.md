@@ -27,6 +27,11 @@ custom duration commit/cancel, running/paused standby policy, focus completion,
 vertical volume popup and idle dial. Convert formats with Pillow or
 another image decoder for inspection; do not commit machine-generated captures.
 
+BLE pairing/recovery snapshots use simulated challenges with the actual product
+Chinese modal. Tests hold a pointer across a challenge replacement, reject the
+stale release, exercise explicit recovery/defer, block background input/idle and
+verify the transport badge independently of music freshness. No bonds are changed.
+
 This proves local input/state logic and rendering, not physical touch or LCD
 appearance. Desktop RGB888 also differs from the hardware framebuffer's color
 quantization. Fonts are Noto-derived; Windows web-font pixel equality is not claimed.

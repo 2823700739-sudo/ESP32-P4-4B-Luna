@@ -92,6 +92,7 @@ export class PreviewModel {
     this.idle = false;
     this.focus = new FocusTimer();
     this.focusEditing = false;
+    this.connectionModal = false;
   }
   get data() { return demoSnapshot(this.scenario); }
   get canControl() { const d = this.data; return d.pc && !d.stale && d.music.available; }
@@ -102,20 +103,21 @@ export class PreviewModel {
     if (this.idle) { this.idle=false; return 'wake'; }
     return 'active';
   }
-  enterIdle() { if(this.focusEditing||this.focus.state==='running')return false;this.idle=true; this.volumeOpen=false; this.dragging=false;return true; }
+  enterIdle() { if(this.focusEditing||this.connectionModal||this.focus.state==='running')return false;this.idle=true; this.volumeOpen=false; this.dragging=false;return true; }
   tick(now) { if(this.focus.tick(now))this.lastTouch=now;if(!this.idle&&!this.dragging&&now-this.lastTouch>=IDLE_MS) this.enterIdle(); }
-  openFocusEditor(){if(this.idle||['running','paused'].includes(this.focus.state))return false;this.focusEditing=true;this.volumeOpen=false;return true;}
+  openFocusEditor(){if(this.connectionModal||this.idle||['running','paused'].includes(this.focus.state))return false;this.focusEditing=true;this.volumeOpen=false;return true;}
+  setConnectionModal(visible,now){this.connectionModal=visible;this.lastTouch=now;if(visible){this.idle=false;this.focusEditing=false;this.volumeOpen=false;this.dragging=false;}}
   closeFocusEditor(now){this.focusEditing=false;this.lastTouch=now;}
   setFocusMinutes(minutes,now){if(!this.focusEditing||!this.focus.select(minutes))return false;this.closeFocusEditor(now);return true;}
   navigate(delta) {
-    if(this.focusEditing)return false;
+    if(this.focusEditing||this.connectionModal)return false;
     const i = CARDS.indexOf(this.card);
     this.chooseCard(CARDS[(i + delta % CARDS.length + CARDS.length) % CARDS.length]);
     return true;
   }
-  chooseCard(card) { if (!this.focusEditing&&CARDS.includes(card)) { this.card = card; this.volumeOpen = false;if(card==='focus')this.focus.notice=false; } }
+  chooseCard(card) { if (!this.focusEditing&&!this.connectionModal&&CARDS.includes(card)) { this.card = card; this.volumeOpen = false;if(card==='focus')this.focus.notice=false; } }
   command(action, value) {
-    if(this.idle||this.focusEditing) return false;
+    if(this.idle||this.focusEditing||this.connectionModal) return false;
     // Outside clicks close the popup AND still execute the intended action.
     if (!['volume-set','mute'].includes(action)) this.volumeOpen = false;
     if (action === 'pet') { this.petResponseUntil = value + 1600; return true; }
@@ -136,6 +138,6 @@ export class PreviewModel {
     this.actions++;
     return true;
   }
-  beginDrag(now) { this.touch(now); this.dragging = true; return true; }
+  beginDrag(now) { if(this.connectionModal)return false;this.touch(now); this.dragging = true; return true; }
   endDrag(now) { this.dragging = false; this.lastTouch = now; }
 }

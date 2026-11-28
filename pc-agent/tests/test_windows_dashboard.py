@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from windows_dashboard import CounterItem, GpuCounters, WindowsDashboard
+from windows_dashboard import CounterItem, CpuCounter, GpuCounters, WindowsDashboard
 
 
 class WindowsDashboardTests(unittest.TestCase):
@@ -29,22 +29,101 @@ class WindowsDashboardTests(unittest.TestCase):
         collector = WindowsDashboard.__new__(WindowsDashboard)
         collector.kernel = Mock()
 
-        def times(idle, kernel, user):
-            idle._obj.value, kernel._obj.value, user._obj.value = 20, 150, 50
-            return 1
-
         def memory(status):
             status._obj.total, status._obj.available = 16 * 1024**3, 4 * 1024**3
             return 1
 
-        collector.kernel.GetSystemTimes.side_effect = times
         collector.kernel.GlobalMemoryStatusEx.side_effect = memory
-        collector.previous = (10, 100)
+        collector.cpu_counter = Mock()
+        collector.cpu_counter.collect.return_value = 90
+        collector._cpu_retry_at = 0
         collector.read_project = Mock(return_value='Luna')
         collector.gpu = {'name': 'Test GPU', 'luid': 'luid_x', 'total': 8 * 1024**3}
         collector.counters = Mock()
         collector._gpu_retry_at = 0
         return collector
+
+    def test_cpu_uses_total_utility_without_scaling_busy_time(self):
+        dll = self.pdh()
+        def formatted(_counter, flags, _type, value):
+            self.assertEqual(flags, 0x8200)
+            value._obj.status, value._obj.number = 0, 51.7
+            return 0
+        dll.PdhGetFormattedCounterValue.side_effect = formatted
+        with patch('windows_dashboard.C.WinDLL', return_value=dll, create=True):
+            counter = CpuCounter()
+        collector = self.collector(); collector.cpu_counter = counter
+        collector.counters.collect.return_value = {}
+        self.assertEqual(collector.sample()['cpu'], 51.7)
+        collector.kernel.GetSystemTimes.assert_not_called()
+        path = dll.PdhAddEnglishCounterW.call_args.args[1]
+        self.assertEqual(path, r'\Processor Information(_Total)\% Processor Utility')
+        counter.close(); counter.close()
+        dll.PdhCloseQuery.assert_called_once()
+
+    def test_cpu_warmup_is_unknown_then_valid_and_turbo_is_capped(self):
+        dll = self.pdh()
+        values = iter([(0xC0000BBA, 0), (1, 0), (0, 150.2), (0, float('nan')), (0, -1)])
+        def formatted(_counter, _flags, _type, value):
+            value._obj.status, value._obj.number = next(values)
+            return 0
+        dll.PdhGetFormattedCounterValue.side_effect = formatted
+        with patch('windows_dashboard.C.WinDLL', return_value=dll, create=True):
+            counter = CpuCounter()
+        self.assertIsNone(counter.collect())
+        self.assertEqual(counter.collect(), 0)
+        self.assertEqual(counter.collect(), 100)
+        self.assertIsNone(counter.collect())
+        self.assertIsNone(counter.collect())
+        counter.close()
+
+    def test_cpu_initialization_failure_closes_partial_query(self):
+        for stage in ('counter', 'warmup'):
+            dll = self.pdh()
+            if stage == 'counter':
+                dll.PdhAddEnglishCounterW.side_effect = None
+                dll.PdhAddEnglishCounterW.return_value = 1
+            else:
+                dll.PdhCollectQueryData.return_value = 1
+            with patch('windows_dashboard.C.WinDLL', return_value=dll, create=True):
+                with self.assertRaises(OSError): CpuCounter()
+            dll.PdhCloseQuery.assert_called_once()
+
+    def test_cpu_failure_preserves_other_metrics_and_recovers_after_cooldown(self):
+        collector = self.collector()
+        failed = collector.cpu_counter
+        failed.collect.side_effect = OSError('unavailable')
+        collector.counters.collect.return_value = {}
+        recovered = Mock(); recovered.collect.return_value = 49.9
+        with patch('windows_dashboard.CpuCounter', return_value=recovered) as factory:
+            with patch('windows_dashboard.time.monotonic', return_value=100):
+                with self.assertLogs('luna.ble.link', level='WARNING'):
+                    sample = collector.sample()
+                self.assertIsNone(sample['cpu'])
+                self.assertEqual((sample['ram_used_gb'], sample['project']), (12, 'Luna'))
+                self.assertIsNone(collector.sample()['cpu'])
+                factory.assert_not_called()
+            with patch('windows_dashboard.time.monotonic', return_value=130):
+                self.assertEqual(collector.sample()['cpu'], 49.9)
+            factory.assert_called_once()
+        failed.close.assert_called_once()
+
+    def test_cpu_creation_failure_is_independent_of_gpu(self):
+        collector = self.collector(); collector.cpu_counter = None
+        collector.counters.collect.return_value = {}
+        with patch('windows_dashboard.CpuCounter', side_effect=OSError()) as factory:
+            with patch('windows_dashboard.time.monotonic', return_value=100):
+                self.assertIsNone(collector.sample()['cpu'])
+                self.assertEqual(collector.sample()['ram_used_gb'], 12)
+            factory.assert_called_once()
+
+    def test_cpu_cleanup_failure_still_closes_gpu(self):
+        collector = self.collector(); cpu, gpu = collector.cpu_counter, collector.counters
+        cpu.close.side_effect = OSError()
+        with self.assertRaises(OSError): collector.close()
+        gpu.close.assert_called_once()
+        self.assertIsNone(collector.cpu_counter)
+        self.assertIsNone(collector.counters)
 
     def test_failed_pdh_initialization_closes_open_query(self):
         for failure in ('missing', 'exception'):

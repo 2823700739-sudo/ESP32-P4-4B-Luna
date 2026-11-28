@@ -1,12 +1,12 @@
 # Luna · 繁星与像素猫的桌面伙伴
 
-**2026.11.27 定版** · **中文** · [English](README.en.md) · [快速部署](docs/HUB-QUICKSTART.md) · [下载本版](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/releases/tag/v2026.11.27)
+**2026.11.28 定版** · **中文** · [English](README.en.md) · [快速部署](docs/HUB-QUICKSTART.md) · [下载本版](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/releases/tag/v2026.11.28)
 
 Luna 是运行在 ESP32-P4-WIFI6-Touch-LCD-4B 上的无线桌面伙伴。720×720 触屏上有六张横滑卡片：时间、音乐、天气、Codex 额度、电脑状态和专注计时；繁星与可互动的行走像素猫，陪你工作和休息。
 
 **时钟、天气、专注不需要电脑 Agent。** 用手机连接设备热点，设置 2.4 GHz Wi-Fi 和天气地点；Windows Agent 通过加密认证 BLE 提供音乐、系统音量、电脑/工程状态与 Codex 额度。设备 DC 常亮供电。
 
-本版包含大数字专注、绿色 K2 自定义键盘（1–999 分钟）、Wi-Fi 逐行列表和连接/保存反馈、全屏配置模态，以及音乐唱针。**分发版本 2026.11.27，应用内版本 2026.11.27-focus-align**，沿用用户确认的已部署固件，不为改名重新编译。本文界面图来自项目网站预览，使用示例数据，非实机照片；设备当前为中文界面、北京时间。
+本版更新 B 版电脑卡与 CPU 采集口径、中文蓝牙配对/恢复弹窗和 Wi-Fi 后台重连，并保留大数字专注、绿色 K2 自定义键盘（1–999 分钟）、Wi-Fi 逐行列表和连接/保存反馈、全屏配置模态，以及音乐唱针。**分发版本 2026.11.28，应用内版本 2026.11.28-computer**，沿用用户确认的已部署固件，不为改名重新编译。本文界面图来自项目网站预览，使用示例数据，非实机照片；设备当前为中文界面、北京时间。
 
 ## 产品界面与功能
 
@@ -42,7 +42,7 @@ Luna 是运行在 ESP32-P4-WIFI6-Touch-LCD-4B 上的无线桌面伙伴。720×72
 
 ### 电脑状态 · 主要指标一眼可见
 
-CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 采集，缺失指标保持未知；当前不提供温度读数，不需要安装额外监控驱动。
+CPU / GPU 双开口圆环，内存 / 专用显存使用更大的文字与进度条。Windows Agent 使用系统 API 采集，CPU 采用处理器效用计数，缺失指标保持未知；移除未接入采集器的温度占位，不需要安装额外监控驱动。
 
 <img src="docs/images/computer.png" width="360" alt="Luna 电脑卡片，CPU GPU 圆环和内存显存条">
 
@@ -73,10 +73,10 @@ CPU / GPU 双圆环，内存 / 专用显存条。Windows Agent 使用系统 API 
 ## 下载与部署
 
 1. 阅读[部署教程](docs/DEPLOYMENT.md)，核对板型、芯片版本与设备现有分区。
-2. 首次安装下载[合并固件](firmware/releases/2026.11.27/luna-first-install-0x0.bin)，按教程从 `0x0` 烧录并核对 SHA-256；已有 Luna 使用 app-only 升级。
+2. 首次安装下载[合并固件](firmware/releases/2026.11.28/luna-first-install-0x0.bin)，按教程从 `0x0` 烧录并核对 SHA-256；已有 Luna 使用 app-only 升级。
 3. 手机连接 Luna 设置热点，打开 `http://192.168.4.1`，扫描 Wi-Fi、连接并设置天气地点。需要电脑相关功能时，再在 Windows 配对 Luna、安装 Python 3.11 x64 并运行 **Start-Luna.cmd**。
 
-[首次安装合并 bin · 0x0](firmware/releases/2026.11.27/luna-first-install-0x0.bin) · [固件 app bin](firmware/releases/2026.11.27/luna-panel.bin) · [bootloader bin](firmware/releases/2026.11.27/bootloader.bin) · [分区表 bin](firmware/releases/2026.11.27/partition-table.bin) · [校验值](firmware/releases/2026.11.27/SHA256SUMS.txt)
+[首次安装合并 bin · 0x0](firmware/releases/2026.11.28/luna-first-install-0x0.bin) · [固件 app bin](firmware/releases/2026.11.28/luna-panel.bin) · [bootloader bin](firmware/releases/2026.11.28/bootloader.bin) · [分区表 bin](firmware/releases/2026.11.28/partition-table.bin) · [校验值](firmware/releases/2026.11.28/SHA256SUMS.txt)
 
 [下载本版完整源码、bin 与许可 ZIP](https://github.com/2823700739-sudo/ESP32-P4-4B-Luna/archive/refs/heads/main.zip)。单独分发 bin 时请同时附带 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[第三方说明](THIRD_PARTY_NOTICES.md)和完整 [LICENSES](LICENSES/) 目录。源代码也可通过 GitHub 的 **Code → Download ZIP** 获取，或克隆本版：
 
@@ -90,7 +90,7 @@ git clone --depth 1 --branch main https://github.com/2823700739-sudo/ESP32-P4-4B
 
 ```text
 firmware/luna-panel/                 ESP-IDF 固件和内置资源
-firmware/releases/2026.11.27/ 公开无凭据 bin、清单与校验值
+firmware/releases/2026.11.28/ 公开无凭据 bin、清单与校验值
 pc-agent/                           Windows BLE Agent
 scripts/                            构建、预览与维护工具
 docs/design/preview/                原有网站交互预览
@@ -106,6 +106,6 @@ docs/images/                        产品界面图
 
 ## 当前限制与许可
 
-时区固定北京时间；天气需要可用的 2.4 GHz Wi-Fi、DNS/NTP 与 Open-Meteo HTTPS。Codex 额度源、VS Code 窗口标题及 GSMTC 播放器兼容性会影响电脑功能。专注状态重启后重置。本版已由用户确认定版，完整时长计时、新合并首装、新保存配置的断电恢复及长期运行未逐项记录，详见[固件清单](firmware/releases/2026.11.27/manifest.json)。
+时区固定北京时间；天气需要可用的 2.4 GHz Wi-Fi、DNS/NTP 与 Open-Meteo HTTPS。Codex 额度源、VS Code 窗口标题及 GSMTC 播放器兼容性会影响电脑功能。专注状态重启后重置。本版已由用户确认定版，完整时长计时、新合并首装、新保存配置的断电恢复及长期运行未逐项记录，详见[固件清单](firmware/releases/2026.11.28/manifest.json)。
 
 Luna 自有代码与文档采用 [Apache License 2.0](LICENSE)，有明确其他许可头的文件沿用原许可。第三方组件与 Noto 派生字库保留各自授权，详见[中英第三方许可与致谢](THIRD_PARTY_NOTICES.md)、[版权通知](NOTICE)及[完整原文与版本清单](LICENSES/manifest.json)。[固件素材说明](firmware/luna-panel/main/assets/README.md)与[像素猫来源](docs/design/preview/assets/README.md)保留转换和来源记录。

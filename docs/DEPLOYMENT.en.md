@@ -1,6 +1,6 @@
 # Luna deployment guide
 
-This guide covers **2026.11.27** on **main**, tag **v2026.11.27**, with embedded app **2026.11.27-focus-align**. Use the merged binary at `0x0` only for first installation, or the app at `0x20000` for an existing matching layout. Then follow [phone setup](PHONE-SETUP.en.md). Clock/weather/Focus do not require a PC Agent. See the [quick start](HUB-QUICKSTART.md) and [Focus guide](FOCUS.md).
+This guide covers **2026.11.28** on **main**, tag **v2026.11.28**, with embedded app **2026.11.28-computer**. Use the merged binary at `0x0` only for first installation, or the app at `0x20000` for an existing matching layout. Then follow [phone setup](PHONE-SETUP.en.md). Clock/weather/Focus do not require a PC Agent. See the [quick start](HUB-QUICKSTART.md) and [Focus guide](FOCUS.md).
 
 [中文](DEPLOYMENT.md) · **English** · [Product introduction](../README.en.md)
 
@@ -28,7 +28,7 @@ Run the commands below from the repository root. When downloading a binary indiv
 
 ## 2. Files and checksums
 
-Files are in the [firmware directory](../firmware/releases/2026.11.27/README.md):
+Files are in the [firmware directory](../firmware/releases/2026.11.28/README.md):
 
 | File | Purpose | Offset |
 | --- | --- | --- |
@@ -39,8 +39,8 @@ Files are in the [firmware directory](../firmware/releases/2026.11.27/README.md)
 | `manifest.json` / `SHA256SUMS.txt` | Version, hardware, offsets, sizes and SHA-256 | Not flashed |
 
 ```powershell
-Get-Content firmware/releases/2026.11.27/SHA256SUMS.txt
-Get-FileHash firmware/releases/2026.11.27/*.bin -Algorithm SHA256
+Get-Content firmware/releases/2026.11.28/SHA256SUMS.txt
+Get-FileHash firmware/releases/2026.11.28/*.bin -Algorithm SHA256
 ```
 
 The hashes of all downloaded binaries must match. Do not download or flash the maintainer's NVS, bonds, TF contents, private configuration or full-chip dump.
@@ -71,7 +71,7 @@ Use this only for the confirmed B1 layout: app at `0x20000`, capacity 10 MiB, st
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x20000 firmware/releases/2026.11.27/luna-panel.bin
+  0x20000 firmware/releases/2026.11.28/luna-panel.bin
 ```
 
 This writes only the app, retaining the partition table, NVS, TF and C6 firmware. Runtime-saved network/location settings remain available. A password compiled into an old app is not inherited; configure it through the [phone page](PHONE-SETUP.en.md). Public images contain no maintainer Wi-Fi credentials.
@@ -93,14 +93,14 @@ After checking SHA-256, select only this file at `0x0` (`0x00` is equivalent):
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x0 firmware/releases/2026.11.27/luna-first-install-0x0.bin
+  0x0 firmware/releases/2026.11.28/luna-first-install-0x0.bin
 ```
 
 At the default 115200 baud rate, compressed transfer may still take around ten minutes; retain power while progress continues. With a stable serial link, add `--baud 460800` after `--port COMx` for faster transfer; the spare board passed writing and verification at that rate.
 
 DIO / 80 MHz / 32 MB settings are already embedded. No local merge or ESP-IDF installation is needed. An existing P4-compatible graphical download tool can likewise select just this file at `0x0`; disable whole-chip erase and do not use the app offset `0x20000`. The raw file begins with padding, so do not rely on automatic first-header checks to validate every embedded image's silicon revision. Verify hardware before writing.
 
-The image is `9977632` bytes (`0x983f20`); sector erasure ends at `0x984000` exclusive. It is not padded to 32 MB. This write range does not touch storage at `0xA20000`, TF or the separate C6 Flash; NVS is still overwritten.
+The image is `10006992` bytes (`0x98b1d0`); sector erasure ends at `0x98c000` exclusive. It is not padded to 32 MB. This write range does not touch storage at `0xA20000`, TF or the separate C6 Flash; NVS is still overwritten.
 
 ### Optional: separate-file installation
 
@@ -109,9 +109,9 @@ Use the following three files **instead of the merged file**, not in addition. T
 ```powershell
 .\.venv-flash\Scripts\python.exe -m esptool --chip esp32p4 --port COMx write-flash `
   --flash-mode keep --flash-freq keep --flash-size keep `
-  0x2000 firmware/releases/2026.11.27/bootloader.bin `
-  0x10000 firmware/releases/2026.11.27/partition-table.bin `
-  0x20000 firmware/releases/2026.11.27/luna-panel.bin
+  0x2000 firmware/releases/2026.11.28/bootloader.bin `
+  0x10000 firmware/releases/2026.11.28/partition-table.bin `
+  0x20000 firmware/releases/2026.11.28/luna-panel.bin
 ```
 
 Release BOOT, restart P4 and retain DC power. The six-card UI, touch navigation and Bluetooth initialization should appear. Use the phone page for Wi-Fi/weather and independent NTP clock. PC quota requires the Agent and an existing usable Codex source. Stop on chip incompatibility, NVS failure or C6 controller unavailability; do not bypass checks with force or whole-chip erase.
@@ -178,8 +178,8 @@ This uses isolated `sdkconfig.public_b1` and `build-public-b1`, rejects nonempty
 With the three published credential-free inputs, use the flashing environment to reproduce the package. Never replace those inputs with private network-enabled builds:
 
 ```powershell
-.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.27
-.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.27 --check
+.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.28
+.\.venv-flash\Scripts\python.exe scripts/merge-public-firmware.py --directory firmware/releases/2026.11.28 --check
 ```
 
 The script verifies input offsets, sizes, SHA-256 and B1 partitions, then checks original segment bytes and padding. It accesses no device and does not pad to full Flash size.

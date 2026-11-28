@@ -30,7 +30,7 @@ menu "Luna Current Product"
             valid time before HTTPS. No restore of a saved timestamp as a clock.
 
     config LUNA_BLE_B1_MUSIC
-        bool "Run the current five-card Luna product"
+        bool "Run the current six-card Luna product"
         default n
         depends on LUNA_BLE_B0
         help

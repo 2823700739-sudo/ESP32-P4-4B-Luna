@@ -8,14 +8,14 @@
       "width": 1920,
       "height": 1080,
       "bytes": 574477,
-      "sha256": "074140498e786e0f9fa2a2f2f428de3987e7bbc8d8a1acaf6ffc87b1e552ccfe"
+      "sha256": "35c26dc10a033e08022e5e9a6b6cf0fd2c0a6e392d0cf8d442ccf7df5309867f"
     },
     {
       "file": "01-clock.png",
       "width": 1920,
       "height": 1080,
-      "bytes": 565499,
-      "sha256": "0e7a41dbc88d10f2a52d1ccad5446e238c8ecbacdceb7f09d486efa6bd6bc18c"
+      "bytes": 565500,
+      "sha256": "025651a59a97bd706f029cf24bf39d0070fcadcf20548aa54be4fd757468d2b0"
     },
     {
       "file": "02-music.png",
@@ -49,8 +49,8 @@
       "file": "06-computer.png",
       "width": 1920,
       "height": 1080,
-      "bytes": 573410,
-      "sha256": "fdfa9303d1e4da15bd1fa45674ed5203d134775fccd5134ce4e4228d021e37de"
+      "bytes": 575093,
+      "sha256": "5654181ea3300a368cc9ac7b4ccfa98096be529fedc55d0760cbec8d08e59db9"
     },
     {
       "file": "07-focus.png",
@@ -70,8 +70,8 @@
       "file": "09-standby.png",
       "width": 1920,
       "height": 1080,
-      "bytes": 586609,
-      "sha256": "d71cdaab9a75a949be9070a5c36aefc16e7679b91c197f110f401ae4f4b25f79"
+      "bytes": 586116,
+      "sha256": "ba6bd0411bacd49342f6e95893089729548a03aa8d6831bbda26a902af086c4b"
     }
   ]
 }

@@ -43,6 +43,13 @@ static lv_obj_t *weather_city,*weather_temp,*weather_condition,*weather_note,*we
 static lv_obj_t *weather_readings[3],*weather_labels[3],*weather_drops[3],*weather_visual;
 static lv_obj_t *setup_overlay,*setup_panel,*setup_name,*setup_access,*setup_info;
 static bool setup_visible,setup_was_active;
+static lv_obj_t *ble_overlay,*ble_panel,*ble_heading,*ble_detail,*ble_number,*ble_note,*ble_accept,*ble_reject,*ble_recover,*ble_defer,*ble_feedback;
+static bool ble_modal;
+static luna_connection_view_t ble_view;
+static luna_connection_view_t ble_pressed_view;
+static bool ble_pressed;
+static void (*ble_answer)(bool,unsigned);
+static void (*ble_recovery)(unsigned,bool);
 static luna_focus_t focus;
 static lv_obj_t *focus_ring,*focus_time,*focus_status,*focus_hint,*focus_badge;
 static lv_obj_t *focus_presets[3],*focus_start,*focus_end,*focus_custom;
@@ -51,7 +58,7 @@ static bool focus_editing,focus_replace;
 static lv_font_t focus_key_font;
 static lv_obj_t *pet,*pet_image,*pet_bubble;
 static lv_obj_t *quota_values[2],*quota_bars[2],*quota_kicker,*quota_note,*project_name,*project_label;
-static lv_obj_t *computer_name,*computer_kicker,*computer_note,*gauges[2],*gauge_values[2],*temperatures[2],*memory_values[2],*memory_bars[2];
+static lv_obj_t *computer_name,*computer_kicker,*computer_note,*gauges[2],*gauge_values[2],*gauge_units[2],*memory_values[2],*memory_bars[2],*memory_percent[2];
 static lv_obj_t *idle_screen,*idle_hands[3],*idle_numbers[4],*idle_date,*idle_message,*idle_pet,*idle_zzz[3];
 static lv_point_precise_t hand_points[3][2],tick_points[60][2];
 static bool idle,blank_press,press_moved,popup_dismissed;
@@ -65,7 +72,7 @@ static int64_t last_touch,last_dashboard;
 #define IDLE_REFRESH_MS 50
 static luna_music_state_t current;
 static luna_music_state_t shown_music;
-static bool music_initialized,connection_initialized,connection_online;
+static bool music_initialized;
 static unsigned active;
 static bool slider_drag,pet_held,closed_volume_on_press;
 static int64_t last_frame,last_weather,last_clock,pet_activity,pet_response_until;
@@ -174,7 +181,7 @@ static void card_arrived(lv_anim_t *a)
 }
 static void choose_card(unsigned index,int direction)
 {
-    if(setup_visible||focus_editing)return;
+    if(setup_visible||focus_editing||ble_modal)return;
     if(index>=CARD_COUNT )return;
     if(index==5)luna_focus_ack(&focus);
     if(ui_timer&&index==active){lv_obj_add_flag(volume_popup,LV_OBJ_FLAG_HIDDEN);return;}
@@ -210,6 +217,7 @@ static void arrow_click(lv_event_t *e)
 }
 static void media_click(lv_event_t *e)
 {
+    if(ble_modal)return;
     const char *command=lv_event_get_user_data(e);
     if(!command)command=current.playing?"music.pause":"music.play";
     luna_music_enqueue(command,0);
@@ -218,7 +226,7 @@ static void media_click(lv_event_t *e)
 }
 static void volume_toggle(lv_event_t *e)
 {
-    (void)e;if(closed_volume_on_press){closed_volume_on_press=false;return;}
+    (void)e;if(ble_modal)return;if(closed_volume_on_press){closed_volume_on_press=false;return;}
     if(current.online&&current.volume_available)
         lv_obj_set_flag(volume_popup,LV_OBJ_FLAG_HIDDEN,!lv_obj_has_flag(volume_popup,LV_OBJ_FLAG_HIDDEN));
 }
@@ -229,7 +237,7 @@ static bool within(lv_obj_t *o,lv_obj_t *ancestor)
 }
 static void set_idle(bool value)
 {
-    if(value&&(setup_visible||focus_editing||focus.state==LUNA_FOCUS_RUNNING))return;
+    if(value&&(setup_visible||focus_editing||ble_modal||focus.state==LUNA_FOCUS_RUNNING))return;
     // Restore the active workload profile before cards; clock/brightness stay fixed.
     if(!value)luna_power_set_idle(false);
     idle=value;blank_press=false;slider_drag=false;
@@ -271,7 +279,7 @@ static void screen_touch(lv_event_t *e)
 {
     lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_PRESSED||code==LV_EVENT_PRESSING)last_touch=esp_timer_get_time();
-    if(setup_visible||focus_editing){blank_press=false;return;}
+    if(setup_visible||focus_editing||ble_modal){blank_press=false;return;}
     lv_indev_t *in=lv_indev_active();
     if(code==LV_EVENT_PRESSING&&in){
         lv_point_t p;lv_indev_get_point(in,&p);
@@ -299,6 +307,7 @@ static void screen_touch(lv_event_t *e)
 }
 static void slider_event(lv_event_t *e)
 {
+    if(ble_modal)return;
     lv_event_code_t code=lv_event_get_code(e);
     if(code==LV_EVENT_PRESSED)slider_drag=true;
     if(code==LV_EVENT_VALUE_CHANGED)lv_label_set_text_fmt(volume_percent,"%d%%",(int)lv_slider_get_value(slider));
@@ -307,7 +316,7 @@ static void slider_event(lv_event_t *e)
 }
 static void gesture(lv_event_t *e)
 {
-    (void)e;blank_press=false;press_moved=true;if(idle||slider_drag||pet_held||setup_visible||focus_editing)return;
+    (void)e;blank_press=false;press_moved=true;if(idle||slider_drag||pet_held||setup_visible||focus_editing||ble_modal)return;
     lv_indev_t *in=lv_indev_active();if(!in)return;
     lv_dir_t dir=lv_indev_get_gesture_dir(in);
     int delta=dir==LV_DIR_LEFT?1:dir==LV_DIR_RIGHT?-1:0;
@@ -343,8 +352,9 @@ static void card_header(unsigned n,const char *name,const lv_image_dsc_t *glyph,
 }
 static lv_obj_t *bottom(unsigned n,const char *left,const char *right)
 {
-    lv_obj_t *l=bounded(cards[n],left,32,408,350,&luna_cjk_13,SUB,false);
-    lv_obj_t *r=right&&right[0]?bounded(cards[n],right,365,408,193,&luna_cjk_13,SUB,true):NULL;
+    int y=n==4?412:408;
+    lv_obj_t *l=bounded(cards[n],left,32,y,350,&luna_cjk_13,SUB,false);
+    lv_obj_t *r=right&&right[0]?bounded(cards[n],right,365,y,193,&luna_cjk_13,SUB,true):NULL;
     if(n==0)clock_bottom=r;
     return l;
 }
@@ -425,7 +435,7 @@ static void build_music(void)
 }
 static void show_focus_keyboard(bool visible)
 {
-    if(visible&&(setup_visible||focus.state==LUNA_FOCUS_RUNNING||focus.state==LUNA_FOCUS_PAUSED))return;
+    if(visible&&(setup_visible||ble_modal||focus.state==LUNA_FOCUS_RUNNING||focus.state==LUNA_FOCUS_PAUSED))return;
     focus_editing=visible;blank_press=false;press_moved=true;pet_held=false;slider_drag=false;
     last_touch=esp_timer_get_time();
     lv_obj_set_flag(focus_overlay,LV_OBJ_FLAG_HIDDEN,!visible);
@@ -512,7 +522,7 @@ static void build_focus_keyboard(void)
 }
 static void focus_action(lv_event_t *event)
 {
-    if(focus_editing||setup_visible)return;
+    if(focus_editing||setup_visible||ble_modal)return;
     unsigned action=(unsigned)(uintptr_t)lv_event_get_user_data(event);
     int64_t now=esp_timer_get_time();last_touch=now;
     if(action==1){if(focus.state==LUNA_FOCUS_RUNNING)luna_focus_pause(&focus,now);else luna_focus_start(&focus,now);}
@@ -596,6 +606,7 @@ static void show_setup(bool visible)
 }
 static void setup_click(lv_event_t *e)
 {
+    if(ble_modal)return;
     (void)e;show_setup(true);
     luna_setup_ap_request(true);
 }
@@ -697,32 +708,36 @@ static void build_quota(void)
 static void build_computer(void)
 {
     card_header(4,"COMPUTER",&luna_icon_computer_24,"等待同步",MINT);
-    computer_name=bounded(cards[4],"等待电脑状态",32,66,526,&luna_cjk_16,SUB,false);
+    computer_name=bounded(cards[4],"等待电脑状态",32,68,526,&luna_cjk_16,SUB,false);
     const char *names[]={"CPU","GPU"};
     for(unsigned i=0;i<2;i++){
-        // Preview SVG: radius 62 + 4.5 stroke, 133 px outer diameter.
-        int x=126+i*205;lv_obj_t *ring=box(cards[4],x,103,133,133,PANEL,LV_RADIUS_CIRCLE);
+        // B layout: 270-degree open dials, lower readings and no temperature row.
+        int x=107+i*216;lv_obj_t *ring=box(cards[4],x,94,160,160,PANEL,LV_RADIUS_CIRCLE);
         lv_obj_set_style_bg_opa(ring,0,0);lv_obj_remove_flag(ring,LV_OBJ_FLAG_CLICKABLE);
-        gauges[i]=lv_arc_create(ring);lv_obj_remove_style_all(gauges[i]);lv_obj_set_size(gauges[i],133,133);
-        lv_arc_set_bg_angles(gauges[i],0,360);lv_arc_set_rotation(gauges[i],270);lv_arc_set_range(gauges[i],0,100);
+        gauges[i]=lv_arc_create(ring);lv_obj_remove_style_all(gauges[i]);lv_obj_set_size(gauges[i],160,160);
+        lv_obj_set_style_pad_all(gauges[i],9,0);
+        lv_arc_set_bg_angles(gauges[i],0,270);lv_arc_set_rotation(gauges[i],135);lv_arc_set_range(gauges[i],0,100);
         lv_obj_set_style_arc_width(gauges[i],9,LV_PART_MAIN);lv_obj_set_style_arc_color(gauges[i],lv_color_hex(0x111c2c),LV_PART_MAIN);
         lv_obj_set_style_arc_width(gauges[i],9,LV_PART_INDICATOR);lv_obj_set_style_arc_color(gauges[i],lv_color_hex(i?SKY:MINT),LV_PART_INDICATOR);
         lv_obj_remove_flag(gauges[i],LV_OBJ_FLAG_CLICKABLE);lv_arc_set_value(gauges[i],0);
-        lv_obj_t *value=text(ring,"--",0,24,&lv_font_montserrat_40,TEXT);lv_obj_set_width(value,133);gauge_values[i]=value;
-        lv_obj_set_style_text_align(value,LV_TEXT_ALIGN_CENTER,0);
-        lv_obj_t *name=text(ring,names[i],0,77,&luna_cjk_13,SUB);lv_obj_set_width(name,133);lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);
-        lv_obj_t *temperature=bounded(cards[4],"温度不可用",x,241,133,&luna_cjk_13,SUB,false);
-        lv_obj_set_style_text_align(temperature,LV_TEXT_ALIGN_CENTER,0);
-        temperatures[i]=temperature;
+        gauge_values[i]=text(ring,"--",0,46,&lv_font_montserrat_40,TEXT);
+        gauge_units[i]=text(ring,"%",0,46+lv_font_montserrat_40.line_height-lv_font_montserrat_40.base_line
+                           -lv_font_montserrat_20.line_height+lv_font_montserrat_20.base_line,&lv_font_montserrat_20,SUB);
+        lv_obj_add_flag(gauge_units[i],LV_OBJ_FLAG_HIDDEN);
+        lv_obj_update_layout(gauge_values[i]);lv_obj_set_x(gauge_values[i],(160-lv_obj_get_width(gauge_values[i]))/2);
+        lv_obj_t *name=text(ring,names[i],0,103,&luna_cjk_13,SUB);lv_obj_set_width(name,160);lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_CENTER,0);
     }
     const char *memory[]={"内存","显存"};
     for(unsigned i=0;i<2;i++){
-        int y=275+i*48;text(cards[4],memory[i],32,y,&luna_cjk_13,TEXT);
-        memory_values[i]=bounded(cards[4],"不可用",218,y,340,&luna_cjk_13,SUB,true);track(cards[4],32,y+27,526,9);
-        memory_bars[i]=box(cards[4],32,y+27,526,9,i?SKY:MINT,5);lv_obj_add_flag(memory_bars[i],LV_OBJ_FLAG_HIDDEN);
+        lv_obj_t *panel=box(cards[4],32,257+i*78,526,65,0x182437,13);
+        lv_obj_set_style_border_width(panel,1,0);lv_obj_set_style_border_color(panel,lv_color_hex(0x344357),0);
+        text(panel,memory[i],14,8,&luna_cjk_20,TEXT);
+        memory_values[i]=bounded(panel,"不可用",102,10,310,&luna_cjk_18,SUB,true);
+        memory_percent[i]=bounded(panel,"--",432,7,80,&lv_font_montserrat_24,i?SKY:MINT,true);
+        track(panel,14,42,498,12);
+        memory_bars[i]=box(panel,14,42,498,12,i?SKY:MINT,6);lv_obj_add_flag(memory_bars[i],LV_OBJ_FLAG_HIDDEN);
     }
     computer_note=bottom(4,"等待电脑状态","WINDOWS / WDDM");
-    lv_obj_set_style_text_font(computer_note,&luna_cjk_16,0);
 }
 static void progress_value(lv_obj_t *bar,int width,int value,bool stale)
 {
@@ -752,20 +767,26 @@ static void update_dashboard(int64_t now)
     }
     lv_label_set_text(computer_name,s.gpu_name[0]?s.gpu_name:"等待电脑状态");
     lv_label_set_text(computer_kicker,s.computer_fresh?"实时同步":s.received_us?"上次数据 · 已离线":"等待同步");
-    double usage[]={s.cpu,s.gpu},temp[]={s.cpu_temp,s.gpu_temp};
+    double usage[]={s.cpu,s.gpu};
     for(unsigned i=0;i<2;i++){
-        if(usage[i]>=0)lv_label_set_text_fmt(gauge_values[i],"%.0f%%",usage[i]);else lv_label_set_text(gauge_values[i],"--");
+        if(usage[i]>=0)lv_label_set_text_fmt(gauge_values[i],"%.0f",usage[i]);else lv_label_set_text(gauge_values[i],"--");
+        lv_obj_set_flag(gauge_units[i],LV_OBJ_FLAG_HIDDEN,usage[i]<0);
+        lv_obj_update_layout(gauge_values[i]);lv_obj_update_layout(gauge_units[i]);
+        int number_width=lv_obj_get_width(gauge_values[i]);
+        int total_width=number_width+(usage[i]>=0?3+lv_obj_get_width(gauge_units[i]):0);
+        lv_obj_set_x(gauge_values[i],(160-total_width)/2);lv_obj_set_x(gauge_units[i],(160-total_width)/2+number_width+3);
         int value=usage[i]>=0?(int)lround(usage[i]):0;
         if(lv_arc_get_value(gauges[i])!=value)lv_arc_set_value(gauges[i],value);
         changed_opacity(gauges[i],s.computer_fresh?255:96);
-        if(temp[i]>=0)lv_label_set_text_fmt(temperatures[i],"%.0f °C",temp[i]);else lv_label_set_text(temperatures[i],"温度不可用");
     }
     double used[]={s.ram_used_gb,s.vram_used_gb},total[]={s.ram_total_gb,s.vram_total_gb};
     for(unsigned i=0;i<2;i++){
         int percent=used[i]>=0&&total[i]>0?(int)lround(used[i]*100/total[i]):-1;
-        if(percent>=0)lv_label_set_text_fmt(memory_values[i],"%.1f / %.1f GB · %d%%",used[i],total[i],percent);
-        else lv_label_set_text(memory_values[i],"不可用");
-        progress_value(memory_bars[i],526,percent,!s.computer_fresh);
+        if(percent>=0){
+            lv_label_set_text_fmt(memory_values[i],"%.1f / %.1f GB",used[i],total[i]);
+            lv_label_set_text_fmt(memory_percent[i],"%d%%",percent);
+        }else{lv_label_set_text(memory_values[i],"不可用");lv_label_set_text(memory_percent[i],"--");}
+        progress_value(memory_bars[i],498,percent,!s.computer_fresh);
     }
     lv_label_set_text(computer_note,s.computer_fresh?"2 秒采样 · 最忙 GPU 引擎":s.received_us?"连接中断 · 保留上次读数":"等待电脑状态");
 }
@@ -883,7 +904,7 @@ static void update_clock(int64_t now)
 }
 static void update_pet_bubble(int64_t now)
 {
-    bool visible=!setup_visible&&!focus_editing&&(focus.notice||(!idle&&now<pet_response_until));
+    bool visible=!setup_visible&&!focus_editing&&!ble_modal&&(focus.notice||(!idle&&now<pet_response_until));
     bool was_hidden=lv_obj_has_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN);
     unsigned width=focus.notice?104:64;
     lv_obj_t *label=lv_obj_get_child(pet_bubble,0);
@@ -929,12 +950,126 @@ static void update_sleep_zzz(int64_t now)
         changed_opacity(idle_zzz[i],opacity);
     }
 }
+static void ble_click(lv_event_t *event)
+{
+    unsigned action=(unsigned)(uintptr_t)lv_event_get_user_data(event);
+    if(!ble_modal||!ble_pressed)return;
+    ble_pressed=false;
+    if(ble_pressed_view.generation!=ble_view.generation||ble_pressed_view.code!=ble_view.code||
+       ble_pressed_view.pairing!=ble_view.pairing||ble_pressed_view.recovery!=ble_view.recovery)return;
+    if(ble_view.answer_pending)return;
+    if(action>=2){if(ble_view.recovery&&ble_recovery)ble_recovery(ble_view.generation,action==2);}
+    else if(ble_view.pairing&&ble_answer)ble_answer(action==1,ble_view.generation);
+    /* One physical answer per displayed challenge. The host validates its
+       connection generation again before applying it. */
+    ble_view.answer_pending=true;
+    lv_obj_add_state(ble_accept,LV_STATE_DISABLED);lv_obj_add_state(ble_reject,LV_STATE_DISABLED);
+    lv_obj_add_state(ble_recover,LV_STATE_DISABLED);
+    lv_obj_add_state(ble_defer,LV_STATE_DISABLED);
+}
+static void ble_press(lv_event_t *event)
+{
+    ble_pressed=lv_event_get_code(event)==LV_EVENT_PRESSED;
+    if(ble_pressed)ble_pressed_view=ble_view;
+}
+static void build_ble_panel(void)
+{
+    ble_feedback=box(root,130,89,460,34,0x233047,14);
+    lv_obj_t *feedback=text(ble_feedback,"",0,0,&luna_cjk_16,MINT);
+    lv_obj_set_width(feedback,460);lv_obj_set_style_text_align(feedback,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_add_flag(ble_feedback,LV_OBJ_FLAG_HIDDEN);
+    ble_overlay=box(root,0,0,720,720,0x080f1c,0);
+    lv_obj_set_style_bg_opa(ble_overlay,200,0);
+    lv_obj_add_flag(ble_overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(ble_overlay,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    ble_panel=box(ble_overlay,92,112,536,496,0x233047,28);
+    lv_obj_add_flag(ble_panel,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_border_color(ble_panel,lv_color_hex(0x42516a),0);lv_obj_set_style_border_width(ble_panel,1,0);
+    image(ble_panel,&luna_icon_bt_24,32,38,26,MINT);
+    ble_heading=bounded(ble_panel,"蓝牙配对",76,27,420,&luna_cjk_28,TEXT,false);
+    ble_detail=text(ble_panel,"",32,96,&luna_cjk_20,SUB);lv_obj_set_width(ble_detail,472);
+    ble_number=bounded(ble_panel,"000000",32,164,472,&luna_digits_86,TEXT,false);
+    lv_obj_set_style_text_align(ble_number,LV_TEXT_ALIGN_CENTER,0);lv_obj_set_style_text_letter_space(ble_number,5,0);
+    ble_note=text(ble_panel,"",32,306,&luna_cjk_16,SUB);lv_obj_set_width(ble_note,472);
+    lv_obj_set_style_text_align(ble_note,LV_TEXT_ALIGN_CENTER,0);
+    ble_reject=button(ble_panel,32,402,222,62,0x34435a,255,ble_click,(void *)(uintptr_t)0);
+    lv_obj_t *label=text(ble_reject,"不一致",0,0,&luna_cjk_20,SUB);center_label_ink(label);
+    ble_accept=button(ble_panel,274,402,230,62,MINT,255,ble_click,(void *)(uintptr_t)1);
+    label=text(ble_accept,"数字一致",0,0,&luna_cjk_20,NIGHT);center_label_ink(label);
+    ble_defer=button(ble_panel,32,402,160,62,0x34435a,255,ble_click,(void *)(uintptr_t)3);
+    label=text(ble_defer,"暂不处理",0,0,&luna_cjk_20,SUB);center_label_ink(label);
+    ble_recover=button(ble_panel,212,402,292,62,0x34435a,255,ble_click,(void *)(uintptr_t)2);
+    label=text(ble_recover,"移除此电脑的旧配对",0,0,&luna_cjk_20,PEACH);center_label_ink(label);
+    lv_obj_t *buttons[]={ble_reject,ble_accept,ble_recover,ble_defer};
+    for(unsigned i=0;i<4;i++){
+        lv_obj_add_event_cb(buttons[i],ble_press,LV_EVENT_PRESSED,NULL);
+        lv_obj_add_event_cb(buttons[i],ble_press,LV_EVENT_PRESS_LOST,NULL);
+    }
+    lv_obj_add_flag(ble_overlay,LV_OBJ_FLAG_HIDDEN);
+}
+void luna_music_ui_connection(const luna_connection_view_t *view,
+                              void (*answer)(bool,unsigned),void (*recover)(unsigned,bool))
+{
+    if(!view||!ble_overlay)return;
+    static bool initialized;
+    const char *phases[]={"蓝牙 · 准备中","蓝牙 · 等待连接","蓝牙 · 连接中",
+                         "蓝牙 · 已配对","蓝牙 · 已连接","蓝牙 · 连接异常"};
+    unsigned phase=(unsigned)view->phase;
+    if(phase>=(sizeof(phases)/sizeof(phases[0])))phase=LUNA_LINK_ERROR;
+    if(!initialized||ble_view.phase!=(luna_link_phase_t)phase){
+        lv_label_set_text(connection,phases[phase]);
+        lv_obj_set_style_image_recolor(connection_icon,lv_color_hex(phase==LUNA_LINK_ACTIVE?MINT:phase==LUNA_LINK_ERROR?PEACH:SUB),0);
+        initialized=true;
+    }
+    bool visible=view->pairing||view->recovery;
+    if(view->generation!=ble_view.generation||view->code!=ble_view.code||
+       view->pairing!=ble_view.pairing||view->recovery!=ble_view.recovery)ble_pressed=false;
+    if(visible&&!ble_modal){
+        if(idle)set_idle(false);
+        if(focus_editing)show_focus_keyboard(false);
+        slider_drag=pet_held=false;blank_press=false;
+        lv_obj_add_flag(volume_popup,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(pet_bubble,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(ble_overlay);
+    }
+    if(visible!=ble_modal)last_touch=esp_timer_get_time();
+    ble_modal=visible;ble_view=*view;ble_view.phase=(luna_link_phase_t)phase;ble_answer=answer;ble_recovery=recover;
+    lv_obj_set_flag(ble_overlay,LV_OBJ_FLAG_HIDDEN,!visible);
+    bool feedback=!visible&&(view->recovery_result==1||phase==LUNA_LINK_ERROR);
+    lv_obj_set_flag(ble_feedback,LV_OBJ_FLAG_HIDDEN,!feedback);
+    if(feedback){
+        lv_obj_t *label=lv_obj_get_child(ble_feedback,0);
+        lv_label_set_text(label,view->recovery_result==1?"旧配对已移除，请在电脑重新添加 Luna":"蓝牙连接未完成，请稍后重试");
+        lv_obj_set_y(label,4);
+    }
+    if(!visible)return;
+    bool pair=view->pairing;
+    lv_label_set_text(ble_heading,pair?"蓝牙配对":"重新配对");
+    lv_label_set_text(ble_detail,pair?"请核对电脑与 Luna 上的六位数字\n一致后，在两端分别确认":
+        "电脑可能已移除了 Luna，\n但设备仍保留此前的配对。\n仅在需要重新配对时继续。");
+    lv_obj_set_flag(ble_number,LV_OBJ_FLAG_HIDDEN,!pair);
+    if(pair)lv_label_set_text_fmt(ble_number,"%06u",view->code%1000000);
+    lv_obj_set_y(ble_note,pair?306:270);
+    if(view->answer_pending)lv_label_set_text(ble_note,"正在处理，请稍候…");
+    else if(!pair&&view->recovery_result<0)lv_label_set_text(ble_note,"处理失败，请稍后重试\n其他配对与数据不受影响");
+    else if(pair)lv_label_set_text_fmt(ble_note,"请在 %u 秒内确认\n数字不一致，请拒绝本次配对",view->remaining_seconds);
+    else lv_label_set_text(ble_note,"只移除此电脑的旧配对，其他配对不受影响\n随后在 Windows 中重新添加 Luna");
+    lv_obj_set_flag(ble_accept,LV_OBJ_FLAG_HIDDEN,!pair);lv_obj_set_flag(ble_reject,LV_OBJ_FLAG_HIDDEN,!pair);
+    lv_obj_set_flag(ble_recover,LV_OBJ_FLAG_HIDDEN,pair);
+    lv_obj_set_flag(ble_defer,LV_OBJ_FLAG_HIDDEN,pair);
+    lv_obj_set_state(ble_accept,LV_STATE_DISABLED,view->answer_pending);
+    lv_obj_set_state(ble_reject,LV_STATE_DISABLED,view->answer_pending);
+    lv_obj_set_state(ble_recover,LV_STATE_DISABLED,view->answer_pending);
+    lv_obj_set_state(ble_defer,LV_STATE_DISABLED,view->answer_pending);
+}
 static void update(lv_timer_t *timer)
 {
     (void)timer;int64_t now=esp_timer_get_time(),elapsed=last_frame?now-last_frame:0;last_frame=now;
     if(elapsed<0)elapsed=0;
     if(elapsed>100000)elapsed=100000;
     if(luna_focus_tick(&focus,now))last_touch=now;
+    /* Pairing has priority over all other modal surfaces. Keep the monotonic
+       timer running, but avoid animating and repainting the obscured cards. */
+    if(ble_modal)return;
     if(!idle&&!setup_visible&&!focus_editing&&!slider_drag&&!pet_held&&now-last_touch>=IDLE_US)set_idle(true);
     update_setup();
     update_focus(now);
@@ -950,11 +1085,6 @@ static void update(lv_timer_t *timer)
         for(unsigned i=0;i<6;i++)changed_opacity(twinkles[i],star_opacity);
     }
     if(luna_music_get_state(&current)){
-        if(!connection_initialized||connection_online!=current.online){
-        lv_label_set_text(connection,current.online?"蓝牙 · 已连接":"蓝牙 · 未连接");
-        lv_obj_set_style_image_recolor(connection_icon,lv_color_hex(current.online?MINT:SUB),0);
-        connection_initialized=true;connection_online=current.online;
-        }
         bool changed=!music_initialized||!music_display_equal(&current,&shown_music);
         bool motion_first=!music_initialized;
         if(active==1&&(changed||slider_drag)){
@@ -1007,7 +1137,7 @@ void luna_music_ui_start(lv_obj_t *screen)
     lv_obj_t *tag=text(header,"your little orbit",45,31,&luna_cjk_10,SUB);lv_obj_set_style_text_letter_space(tag,2,0);
     lv_obj_t *badge=box(header,420,5,170,38,0x182235,18);
     connection_icon=image(badge,&luna_icon_bt_24,12,10,18,SUB);
-    connection=bounded(badge,"蓝牙 · 未连接",37,9,123,&luna_cjk_13,SUB,false);
+    connection=bounded(badge,"蓝牙 · 准备中",37,9,123,&luna_cjk_13,SUB,false);
     for(unsigned i=0;i<CARD_COUNT;i++){
         cards[i]=box(root,65,135,590,450,PANEL,32);lv_obj_set_style_border_width(cards[i],1,0);
         lv_obj_set_style_border_color(cards[i],lv_color_hex(0x344357),0);lv_obj_set_style_clip_corner(cards[i],true,0);
@@ -1056,7 +1186,7 @@ void luna_music_ui_start(lv_obj_t *screen)
     lv_obj_set_style_bg_color(slider,lv_color_hex(PEACH),LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider,7,LV_PART_KNOB);lv_obj_add_event_cb(slider,slider_event,LV_EVENT_ALL,NULL);
     lv_obj_remove_flag(slider,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    build_idle();build_setup_panel();build_focus_keyboard();last_touch=esp_timer_get_time();
+    build_idle();build_setup_panel();build_focus_keyboard();build_ble_panel();last_touch=esp_timer_get_time();
     bubble(root);lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESSED,NULL);
     lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESSING,NULL);lv_obj_add_event_cb(root,gesture,LV_EVENT_GESTURE,NULL);
     lv_obj_add_event_cb(root,screen_touch,LV_EVENT_RELEASED,NULL);lv_obj_add_event_cb(root,screen_touch,LV_EVENT_PRESS_LOST,NULL);

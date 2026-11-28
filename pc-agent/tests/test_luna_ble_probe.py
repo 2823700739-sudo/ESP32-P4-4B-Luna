@@ -234,5 +234,57 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             async def read_gatt_char(self, *args, **kwargs): await asyncio.Event().wait()
         with self.assertRaises(asyncio.TimeoutError): await wait_security_ready(Client(), .01)
 
+    async def test_notification_subscription_hang_disconnects_without_entering_session(self):
+        closed=[]
+        class Client(FakeClient):
+            def __init__(self,*args,**kwargs):
+                super().__init__();self.is_connected=True;self.mtu_size=23
+                self.services=SimpleNamespace(get_characteristic=lambda _uuid:object())
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):self.is_connected=False;closed.append(True)
+            async def read_gatt_char(self,*args,**kwargs):return b'\x01'
+            async def start_notify(self,*args):await asyncio.Event().wait()
+        with patch.dict(sys.modules,{'bleak':SimpleNamespace(BleakClient=Client)}):
+            with self.assertRaises(asyncio.TimeoutError):
+                async with connected_session(object(),notify_timeout=.01):
+                    self.fail('Unconfirmed subscription must not be used')
+        self.assertEqual(closed,[True])
+
+    async def test_cancelled_session_bounds_notification_cleanup_and_disconnects(self):
+        entered=asyncio.Event();closed=[];sessions=[]
+        class Client(FakeClient):
+            def __init__(self,*args,**kwargs):
+                super().__init__();self.is_connected=True;self.mtu_size=23
+                self.services=SimpleNamespace(get_characteristic=lambda _uuid:object())
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):self.is_connected=False;closed.append(True)
+            async def read_gatt_char(self,*args,**kwargs):return b'\x01'
+            async def start_notify(self,*args):pass
+            async def stop_notify(self,*args):await asyncio.Event().wait()
+        async def body():
+            async with connected_session(object(),cleanup_timeout=.01)as session:
+                sessions.append(session);entered.set();await asyncio.Event().wait()
+        with patch.dict(sys.modules,{'bleak':SimpleNamespace(BleakClient=Client)}):
+            task=asyncio.create_task(body());await asyncio.wait_for(entered.wait(),.5);task.cancel()
+            with self.assertRaises(asyncio.CancelledError):await asyncio.wait_for(task,.5)
+        self.assertEqual(closed,[True]);self.assertTrue(sessions[0].failed)
+        self.assertFalse(sessions[0].pending)
+
+    async def test_cleanup_error_preserves_original_failure_and_disconnects(self):
+        closed=[]
+        class Client(FakeClient):
+            def __init__(self,*args,**kwargs):
+                super().__init__();self.is_connected=True;self.mtu_size=23
+                self.services=SimpleNamespace(get_characteristic=lambda _uuid:object())
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):self.is_connected=False;closed.append(True)
+            async def read_gatt_char(self,*args,**kwargs):return b'\x01'
+            async def start_notify(self,*args):pass
+            async def stop_notify(self,*args):raise OSError('cleanup only')
+        with patch.dict(sys.modules,{'bleak':SimpleNamespace(BleakClient=Client)}):
+            with self.assertRaisesRegex(ValueError,'original request'):
+                async with connected_session(object()):raise ValueError('original request')
+        self.assertEqual(closed,[True])
+
 
 if __name__ == "__main__": unittest.main()
